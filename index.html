@@ -40,15 +40,12 @@
   .badge{font-size:12px;color:var(--muted);flex:1}
   .quick{border:0;border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;font-weight:600;background:var(--gbg);color:#11643a}
   .quick.clr{background:#eef0f3;color:var(--muted)}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-  .it{border:1.5px solid var(--line);background:#fafbfc;border-radius:10px;min-height:48px;padding:6px 4px;font:inherit;font-size:12.5px;line-height:1.15;color:var(--ink);display:flex;align-items:center;justify-content:center;text-align:center;user-select:none}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .it{border:1.5px solid var(--line);background:#fafbfc;border-radius:10px;min-height:52px;padding:6px 2px;font:inherit;font-size:12px;line-height:1.15;color:var(--ink);display:flex;align-items:center;justify-content:center;text-align:center;user-select:none}
   .it.s1{background:var(--gbg);border-color:var(--g);color:#0f5c33;font-weight:600}
   .it.s2{background:var(--rbg);border-color:var(--r);color:#8e1f1f;font-weight:600}
   .it.s3{background:var(--ybg);border-color:var(--y);color:#6d5300;font-weight:600}
-  .it.s1::before{content:"✓ "} .it.s2::before{content:"✗ "} .it.s3::before{content:"! "}
-  textarea{width:100%;margin-top:8px;border:1.5px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:14px;resize:vertical;min-height:40px;display:none;background:#fffdf3}
-  .room.needs textarea, textarea.has{display:block}
-  .room.needs textarea{border-color:var(--y)}
+  .it.s1::before{content:"+ "} .it.s2::before{content:"− "} .it.s3::before{content:"! "}
   footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:5}
   footer button{flex:1;border:0;border-radius:12px;padding:13px 6px;font:inherit;font-weight:700;font-size:14px}
   .b1{background:var(--navy);color:#fff} .b2{background:#e8edf3;color:var(--navy)}
@@ -68,6 +65,8 @@
   .filter button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font:inherit;font-size:13px;white-space:nowrap;color:var(--ink)}
   .filter button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
   #lock{position:fixed;inset:0;z-index:50;background:var(--navy);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+  #inapp{position:fixed;left:10px;right:10px;top:calc(10px + env(safe-area-inset-top));z-index:60;background:#fff2c4;color:#4d3a00;border:2px solid var(--y);border-radius:16px;padding:14px;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  #inapp p{margin:6px 0;font-size:14px} #inapp button{margin-top:6px;border:0;border-radius:10px;padding:10px 18px;font:inherit;font-weight:700;background:var(--navy);color:#fff}
   #lock h2{margin:0 0 6px;font-size:22px} #lock p{margin:0 0 18px;opacity:.8;font-size:14px}
   #lock input{width:200px;text-align:center;font-size:26px;letter-spacing:8px;border:0;border-radius:12px;padding:12px}
   #lock button{margin-top:14px;width:200px;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:700;background:#7be0a6;color:#0d3b24}
@@ -120,13 +119,15 @@
 
 <footer>
   <button class="b2" id="btnMore">Ещё</button>
-  <button class="b1" id="btnExport">📥 Скачать Excel</button>
+  <button class="b1" id="btnExport">📥 Сохранить Excel</button>
+  <button class="b2" id="btnShare" style="display:none;flex:0 0 56px">📤</button>
 </footer>
 
 <dialog id="dlg">
   <h3>Настройки и архив</h3>
   <label>ФИО старосты / специалиста (для подписи)</label>
   <input id="who" type="text" placeholder="Иванов И.И.">
+  <div id="offInfo" style="font-size:13px;margin-top:10px;padding:8px 10px;border-radius:10px;background:#eef0f3"></div>
   <label>Архив проверок этого этажа</label>
   <div class="hist" id="hist"></div>
   <div id="admin" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:10px">
@@ -170,12 +171,9 @@ const ITEMS = [
   ["Наведение порядка в шкафах","Шкафы"],
   ["Отмывка ванной комнаты","Ванная"],
   ["Отмывка туалета","Туалет"],
-  ["Отмывка коридора","Коридор"],
-  ["Отмывка кухни","Кухня"],
-  ["Наведение порядка в кухонных шкафах","Кухонные шкафы"],
-  ["Отмывка электроплиты","Электро&shy;плита"]
+  ["Отмывка коридора","Коридор"]
 ];
-const ST_TXT = ["", "чисто", "грязно", "замеч."];
+const ST_TXT = ["", "+", "−", "!"];
 
 /* ---------- хранение (в телефоне) ---------- */
 const mem = {};
@@ -189,12 +187,13 @@ const today = () => { const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimez
 let floor, date, data, filter="all";
 const key = () => `obhod:${floor}:${date}`;
 
-function load(){ try{ data = JSON.parse(lsGet(key())||"{}"); }catch(e){ data={}; } }
+function load(){ try{ data = JSON.parse(lsGet(key())||"{}"); }catch(e){ data={}; }
+  for(const n in data){ const s=(data[n].s||[]).slice(0,ITEMS.length); while(s.length<ITEMS.length) s.push(0); data[n]={s}; } }
 function save(){
-  const has = Object.values(data).some(r => (r.s||[]).some(x=>x) || r.n);
+  const has = Object.values(data).some(r => (r.s||[]).some(x=>x));
   if(has) lsSet(key(), JSON.stringify(data)); else lsDel(key());
 }
-function room(n){ return data[n] || (data[n] = {s:Array(ITEMS.length).fill(0), n:""}); }
+function room(n){ return data[n] || (data[n] = {s:Array(ITEMS.length).fill(0)}); }
 function status(n){
   const r = data[n]; if(!r) return "todo";
   const s = r.s;
@@ -212,9 +211,9 @@ function render(){
     if(filter==="todo" && !(st==="todo"||st==="part")) continue;
     if(filter==="bad" && st!=="bad") continue;
     if(filter==="warn" && st!=="warn") continue;
-    const r = data[n] || {s:Array(ITEMS.length).fill(0), n:""};
+    const r = data[n] || {s:Array(ITEMS.length).fill(0)};
     const el = document.createElement("section");
-    el.className = "room " + ({ok:"ok",bad:"bad",warn:"warn"}[st]||"") + (r.s.some(x=>x>=2)?" needs":"");
+    el.className = "room " + ({ok:"ok",bad:"bad",warn:"warn"}[st]||"");
     el.dataset.n = n;
     el.innerHTML = `
       <div class="rh">
@@ -223,8 +222,7 @@ function render(){
         <button class="quick" data-a="all">✓ Всё чисто</button>
         <button class="quick clr" data-a="clr" title="Сбросить">↺</button>
       </div>
-      <div class="grid">${ITEMS.map((it,i)=>`<button class="it s${r.s[i]}" data-i="${i}">${it[1]}</button>`).join("")}</div>
-      <textarea class="${r.n?'has':''}" placeholder="Замечание: что именно не так…">${esc(r.n)}</textarea>`;
+      <div class="grid">${ITEMS.map((it,i)=>`<button class="it s${r.s[i]}" data-i="${i}">${it[1]}</button>`).join("")}</div>`;
     list.appendChild(el);
   }
   if(!list.children.length) list.innerHTML = `<p style="text-align:center;color:var(--muted);padding:30px">Здесь пусто 👌</p>`;
@@ -244,7 +242,7 @@ function stats(){
 }
 function refreshRoom(el){
   const n = el.dataset.n, r = room(n), st = status(n);
-  el.className = "room " + ({ok:"ok",bad:"bad",warn:"warn"}[st]||"") + (r.s.some(x=>x>=2)?" needs":"");
+  el.className = "room " + ({ok:"ok",bad:"bad",warn:"warn"}[st]||"");
   el.querySelectorAll(".it").forEach((b,i)=>b.className="it s"+r.s[i]);
   el.querySelector(".badge").textContent = badge(r);
   stats();
@@ -256,16 +254,11 @@ $("#list").addEventListener("click", e=>{
   const it = e.target.closest(".it");
   if(it){ const i=+it.dataset.i; r.s[i] = (r.s[i]+1)%4; if(navigator.vibrate) navigator.vibrate(8); }
   else if(e.target.dataset.a==="all"){ r.s = r.s.map(()=>1); }
-  else if(e.target.dataset.a==="clr"){ r.s = r.s.map(()=>0); r.n=""; el.querySelector("textarea").value=""; el.querySelector("textarea").classList.remove("has"); }
+  else if(e.target.dataset.a==="clr"){ r.s = r.s.map(()=>0); }
   else return;
   save(); refreshRoom(el);
-  if(r.s.some(x=>x>=2) && it && r.s[+it.dataset.i]===3 && !r.n) setTimeout(()=>el.querySelector("textarea").focus(),50);
 });
-$("#list").addEventListener("input", e=>{
-  if(e.target.tagName!=="TEXTAREA") return;
-  const el=e.target.closest(".room"); room(el.dataset.n).n = e.target.value;
-  e.target.classList.toggle("has", !!e.target.value); save();
-});
+
 $("#filter").addEventListener("click", e=>{
   const b=e.target.closest("button"); if(!b) return;
   filter=b.dataset.f; document.querySelectorAll("#filter button").forEach(x=>x.classList.toggle("on",x===b)); render();
@@ -296,7 +289,7 @@ $("#btnMore").onclick = ()=>{
     const cnt=Object.values(dd).filter(r=>r.s.some(x=>x)).length;
     return `<div><a href="#" data-d="${d}">${fmtDate(d)}</a><span>${cnt} комн.</span></div>`;
   }).join("") : `<p style="color:var(--muted)">Пока нет сохранённых проверок.</p>`;
-  renderAdmin();
+  renderAdmin(); offlineStatus();
   $("#dlg").showModal();
 };
 $("#hist").onclick = e=>{ const a=e.target.closest("a"); if(!a) return; e.preventDefault(); date=a.dataset.d; $("#date").value=date; load(); render(); $("#dlg").close(); };
@@ -388,50 +381,39 @@ function xmlEsc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt
 function colName(i){ let s=""; i++; while(i){ const m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26);} return s; }
 
 function buildSheet(fl, dt, dd, dorm, who){
-  // столбцы: A(отступ) B(№) C..M (11 пунктов) N(примечание)
-  const rows = []; const merges = [];
+  // столбцы: A(отступ) B(№ ком.) C..J (8 пунктов)
+  const rows = []; const merges = []; const N=ITEMS.length, LAST=colName(1+N);
   const put = (r,c,v,s)=>{ (rows[r]=rows[r]||[])[c]={v,s}; };
-  put(2,11,"Приложение № 1",9); merges.push("L2:N2");
-  put(3,11,"к приказу",9); merges.push("L3:N3");
-  put(4,11,"от 7 мая 2026 г. № 822-р",9); merges.push("L4:N4");
-  put(6,1,`ОБЩЕЖИТИЕ № ${dorm||"______"}`,8); merges.push("B6:N6");
-  put(7,1,`${fl} этаж · проверка от ${fmtDate(dt)}`,10); merges.push("B7:N7");
-  put(8,1,"№ ком.",1); ITEMS.forEach((it,i)=>put(8,2+i,it[0],1)); put(8,13,"Примечание",1);
+  put(2,N-1,"Приложение № 1",9); merges.push(`${colName(N-1)}2:${LAST}2`);
+  put(3,N-1,"к приказу",9); merges.push(`${colName(N-1)}3:${LAST}3`);
+  put(4,N-1,"от 7 мая 2026 г. № 822-р",9); merges.push(`${colName(N-1)}4:${LAST}4`);
+  put(6,1,`ОБЩЕЖИТИЕ № ${dorm||"______"}`,8); merges.push(`B6:${LAST}6`);
+  put(7,1,`${fl} этаж`,14); merges.push(`B7:D7`);
+  put(8,1,"№ ком.",1); ITEMS.forEach((it,i)=>put(8,2+i,it[0],1));
   let r=9;
   for(const n of FLOORS[fl]){
-    const rm = dd[n] || {s:Array(ITEMS.length).fill(0), n:""};
+    const rm = dd[n] || {s:Array(N).fill(0)};
     put(r,1,n,2);
-    rm.s.forEach((x,i)=>put(r,2+i,ST_TXT[x],[6,3,4,5][x]));
-    const yel = rm.s.map((x,i)=>x===3?ITEMS[i][1].replace("&shy;",""):null).filter(Boolean);
-    const red = rm.s.map((x,i)=>x===2?ITEMS[i][1].replace("&shy;",""):null).filter(Boolean);
-    let note = rm.n||"";
-    const auto = [red.length?`Грязно: ${red.join(", ")}`:"", yel.length?`Замеч.: ${yel.join(", ")}`:""].filter(Boolean).join("; ");
-    put(r,13, [note,auto].filter(Boolean).join(" — "), rm.s.includes(2)?11:(rm.s.includes(3)||note?12:7));
+    for(let i=0;i<N;i++){ const x=rm.s[i]||0; put(r,2+i,ST_TXT[x],[6,3,4,5][x]); }
     r++;
   }
-  // итог
-  let ok=0,bad=0,warn=0,todo=0;
-  for(const n of FLOORS[fl]){ const rm=dd[n]; const s=rm?rm.s:[0];
-    if(s.includes(2)) bad++; else if(s.includes(3)) warn++; else if(s.length===ITEMS.length&&s.every(x=>x===1)) ok++; else todo++; }
+  const lastRoom=r-1;
   r++;
-  put(r,1,`Итого комнат: ${FLOORS[fl].length}.  Чисто: ${ok}.  Грязно: ${bad}.  С замечаниями: ${warn}.  Не проверено/не полностью: ${todo}.`,10); merges.push(`B${r}:N${r}`);
-  r++;
-  put(r,1,`Заполнено по коду: ${lsGet("obhod:code")||"—"} (${access()?codeLabel():"—"}) · устройство: ${devModel()} ${devId()}`,13); merges.push(`B${r}:N${r}`);
-  r+=2;
-  put(r,1,`    Специалист сопровождения:      _______________ / ${who||"____________________"} /`,0);
-  put(r,8,"Начальник отдела УРСО: _______________ / Е.В. Герасимович /",0);
-  r++; put(r,4,"Подпись",13); merges.push(`E${r}:F${r}`); put(r,6,"Ф.И.О.",13); merges.push(`G${r}:H${r}`);
+  put(r,1,"    Специалист сопровождения:  _______________ / "+(who||"____________________")+" /",0);
+  r++; put(r,3,"Подпись",13); put(r,5,"Ф.И.О.",13);
+  r+=2; put(r,5,"Начальник отдела УРСО: _______________ / Е.В. Герасимович /",0);
   r+=2; const [y,m,d]=dt.split("-");
   put(r,1,`«${d}» ${MONTHS[+m-1]} ${y} г.`,0);
+  r++; put(r,1,`Заполнено по коду: ${lsGet("obhod:code")||"—"} (${access()?codeLabel():"—"}) · ${devModel()} ${devId()}`,15); merges.push(`B${r}:${LAST}${r}`);
   const lastRow=r;
 
-  const widths={0:1.9,1:7.5,13:30}; for(let i=2;i<=12;i++) widths[i]=10.5;
-  let x=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="90"><pane ySplit="8" topLeftCell="A9" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>`;
-  for(let i=0;i<=13;i++) x+=`<col min="${i+1}" max="${i+1}" width="${widths[i]}" customWidth="1"/>`;
+  const widths={0:1.9,1:8}; for(let i=2;i<=1+N;i++) widths[i]=13;
+  let x=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0"><pane ySplit="8" topLeftCell="A9" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>`;
+  for(let i=0;i<=1+N;i++) x+=`<col min="${i+1}" max="${i+1}" width="${widths[i]}" customWidth="1"/>`;
   x+=`</cols><sheetData>`;
   for(let i=1;i<=lastRow;i++){
-    const row=rows[i]; const noteLen = row&&row[13]&&row[13].v ? String(row[13].v).length : 0;
-    const ht = i===8?` ht="62" customHeight="1"`:(i>8&&i<9+FLOORS[fl].length?` ht="${noteLen>34?Math.min(90,15*Math.ceil(noteLen/34)):18}" customHeight="1"`:"");
+    const row=rows[i];
+    const ht = i===8?` ht="40" customHeight="1"`:(i>8&&i<=lastRoom?` ht="16" customHeight="1"`:"");
     if(!row){ x+=`<row r="${i}"${ht}/>`; continue; }
     x+=`<row r="${i}"${ht}>`;
     row.forEach((c,ci)=>{ if(!c) return; const ref=colName(ci)+i;
@@ -439,7 +421,7 @@ function buildSheet(fl, dt, dd, dorm, who){
     x+=`</row>`;
   }
   x+=`</sheetData><mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join("")}</mergeCells>`;
-  x+=`<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="1"/></worksheet>`;
+  x+=`<pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/></worksheet>`;
   return x;
 }
 
@@ -454,13 +436,13 @@ function buildXlsx(fl, dt, dd, dorm, who){
 <fill><patternFill patternType="none"/></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="14">
+<cellXfs count="16">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>
@@ -469,6 +451,8 @@ function buildXlsx(fl, dt, dd, dorm, who){
 <xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left"/></xf>
 </cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
   const sheetName = `${fl} ЭТ`;
   const files = {
@@ -508,19 +492,54 @@ function zip(files){
   return new Blob([...parts,...central,new Uint8Array(end.buffer)],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }
 
-$("#btnExport").onclick = async ()=>{
+function makeFile(){
   const blob = buildXlsx(floor, date, data, lsGet("obhod:dorm")||"", lsGet("obhod:who")||"");
-  const name = `Обход_${floor}_этаж_${fmtDate(date)}.xlsx`;
-  logEvent("Скачал Excel",{date});
-  try{
-    const file = new File([blob], name, {type:blob.type});
-    if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:name}); return; }
-  }catch(e){ if(e && e.name==="AbortError") return; }
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); toast("Файл сохранён в «Загрузки»");
+  return {blob, name:`Обход_${floor}_этаж_${fmtDate(date)}.xlsx`};
+}
+function canShareXlsx(){
+  try{ const f=new File([new Blob(["x"])],"t.xlsx",{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    return !!(navigator.canShare && navigator.canShare({files:[f]})); }catch(e){ return false; }
+}
+$("#btnExport").onclick = ()=>{
+  if(inApp()){ showInApp(true); return; }
+  const {blob,name}=makeFile(); logEvent("Скачал Excel",{date});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=name; a.rel="noopener"; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },4000);
+  toast("✅ Excel сохранён: «Загрузки» / «Файлы»");
 };
+$("#btnShare").onclick = async ()=>{
+  const {blob,name}=makeFile();
+  try{ await navigator.share({files:[new File([blob],name,{type:blob.type})], title:name}); logEvent("Отправил Excel",{date}); }
+  catch(e){ if(!e || e.name!=="AbortError") $("#btnExport").click(); }
+};
+if(canShareXlsx()) $("#btnShare").style.display="";
+
+/* ---------- открыто внутри Telegram / другого приложения ---------- */
+function inApp(){
+  const u=navigator.userAgent||"";
+  return !!(window.TelegramWebview || window.TelegramWebviewProxy || /Telegram|Instagram|FBAN|FBAV|VKClient|WhatsApp|; wv\)/i.test(u));
+}
+function showInApp(force){
+  if(!inApp() && !force) return;
+  const ios=/iPhone|iPad/.test(navigator.userAgent);
+  let b=document.getElementById("inapp");
+  if(!b){ b=document.createElement("div"); b.id="inapp"; document.body.appendChild(b); }
+  b.innerHTML=`<div style="font-size:30px">⚠️</div><b>Откройте в ${ios?"Safari":"Chrome"}</b>
+    <p>Внутри Telegram приложение не работает без интернета и не может сохранить Excel.</p>
+    <p>${ios?"Нажмите значок компаса / «Открыть в Safari» внизу справа":"Нажмите ⋮ (три точки вверху) → «Открыть в браузере» / «Открыть в Chrome»"}</p>
+    <p style="font-size:13px;opacity:.8">Ссылка: ${location.origin+location.pathname}</p>
+    <button onclick="this.parentNode.remove()">Понятно</button>`;
+}
+showInApp();
 
 /* ---------- офлайн-режим ---------- */
+async function offlineStatus(){
+  const el=$("#offInfo"); if(!el) return;
+  let ready=false; try{ ready = !!(navigator.serviceWorker && navigator.serviceWorker.controller) && !!(await caches.match("index.html",{ignoreSearch:true})); }catch(e){}
+  el.innerHTML = inApp() ? "⚠️ Открыто внутри Telegram — откройте в браузере, иначе без интернета не работает"
+    : ready ? "✅ Без интернета: готово. Можно работать в подвале и без сети." : "⏳ Без интернета: ещё не готово — откройте приложение 1 раз с интернетом и закройте.";
+}
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
