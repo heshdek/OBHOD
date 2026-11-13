@@ -25,6 +25,7 @@
   h1{font-size:16px;margin:0;flex:1;font-weight:700;letter-spacing:.2px}
   select,input[type=date],input[type=text]{font:inherit;border:0;border-radius:10px;padding:9px 10px;background:#fff;color:var(--ink);min-width:0}
   header select,header input{flex:1}
+  header select:disabled{opacity:1;color:var(--ink);-webkit-appearance:none;appearance:none}
   .lbl{font-size:12px;opacity:.8;white-space:nowrap}
   .bar{height:6px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden;flex:1}
   .bar i{display:block;height:100%;width:0;background:#7be0a6;transition:width .2s}
@@ -66,9 +67,23 @@
   .filter{display:flex;gap:6px;padding:0 12px 4px;overflow-x:auto}
   .filter button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font:inherit;font-size:13px;white-space:nowrap;color:var(--ink)}
   .filter button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  #lock{position:fixed;inset:0;z-index:50;background:var(--navy);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+  #lock h2{margin:0 0 6px;font-size:22px} #lock p{margin:0 0 18px;opacity:.8;font-size:14px}
+  #lock input{width:180px;text-align:center;font-size:26px;letter-spacing:8px;border:0;border-radius:12px;padding:12px}
+  #lock button{margin-top:14px;width:180px;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:700;background:#7be0a6;color:#0d3b24}
+  #lock .err{color:#ffb3b3;min-height:20px;margin-top:10px;font-size:14px}
+  body.locked{overflow:hidden}
 </style>
 </head>
-<body>
+<body class="locked">
+<div id="lock">
+  <div style="font-size:44px">🔒</div>
+  <h2>Обход этажа</h2>
+  <p>Введите код доступа</p>
+  <input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12">
+  <button id="pinBtn">Войти</button>
+  <div class="err" id="pinErr"></div>
+</div>
 <header>
   <div class="row">
     <h1>Обход этажа</h1>
@@ -112,6 +127,7 @@
   <label>Архив проверок этого этажа</label>
   <div class="hist" id="hist"></div>
   <div class="acts">
+    <button id="btnLogout" style="background:#eef0f3;color:var(--ink)">Сменить код</button>
     <button id="btnReset" style="background:#fbdede;color:#8e1f1f">Очистить день</button>
     <button id="btnClose" style="background:var(--navy);color:#fff">Готово</button>
   </div>
@@ -231,9 +247,12 @@ $("#filter").addEventListener("click", e=>{
 
 function init(){
   const sel=$("#floor");
-  sel.innerHTML = Object.keys(FLOORS).map(f=>`<option value="${f}">${f} этаж (${FLOORS[f].length} комн.)</option>`).join("");
-  const hash = decodeURIComponent(location.hash.slice(1));
-  floor = FLOORS[hash] ? hash : (FLOORS[lsGet("obhod:floor")] ? lsGet("obhod:floor") : Object.keys(FLOORS)[0]);
+  const acc = access();
+  const allowed = acc==="*" ? Object.keys(FLOORS) : [acc];
+  sel.innerHTML = allowed.map(f=>`<option value="${f}">${f} этаж (${FLOORS[f].length} комн.)</option>`).join("");
+  sel.disabled = allowed.length===1;
+  const hash = decodeURIComponent(location.hash.slice(1)), saved = lsGet("obhod:floor");
+  floor = allowed.includes(hash) ? hash : (allowed.includes(saved) ? saved : allowed[0]);
   sel.value = floor; date = today(); $("#date").value = date;
   $("#dorm").value = lsGet("obhod:dorm")||""; $("#who").value = lsGet("obhod:who")||"";
   load(); render();
@@ -255,6 +274,7 @@ $("#btnMore").onclick = ()=>{
 };
 $("#hist").onclick = e=>{ const a=e.target.closest("a"); if(!a) return; e.preventDefault(); date=a.dataset.d; $("#date").value=date; load(); render(); $("#dlg").close(); };
 $("#btnClose").onclick = ()=>$("#dlg").close();
+$("#btnLogout").onclick = ()=>{ $("#dlg").close(); lsDel("obhod:pin"); document.body.classList.add("locked"); const l=$("#lock"); l.style.display="flex"; setTimeout(()=>$("#pin").focus(),100); };
 $("#btnReset").onclick = ()=>{ if(confirm(`Очистить проверку ${floor} этажа за ${fmtDate(date)}?`)){ data={}; save(); render(); $("#dlg").close(); } };
 
 function fmtDate(d){ const [y,m,dd]=d.split("-"); return `${dd}.${m}.${y}`; }
@@ -401,7 +421,20 @@ if("serviceWorker" in navigator && location.protocol.startsWith("http")){
 }
 try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
 
-init();
+/* ---------- коды доступа: у каждого этажа свой ---------- */
+const PINS = {"6df28825": "2", "5e4c8884": "3", "337636df": "4", "63d21abe": "5", "d1675ebf": "6", "44bc43d1": "7", "e28a5c19": "8", "e3ff20ea": "9", "51b5eda4": "10", "272637d4": "11", "6c3b099f": "12", "f3353c50": "13", "e67cfc41": "14", "2119c444": "15", "d7b8ff2d": "16", "062eb4d4": "*"};
+function fnv(s){ let h=0x811c9dc5; for(const b of new TextEncoder().encode(s)){ h^=b; h=Math.imul(h,0x01000193)>>>0; } return h.toString(16).padStart(8,"0"); }
+function access(){ return PINS[lsGet("obhod:pin")] || null; }
+function unlock(){ const l=document.getElementById("lock"); if(l) l.style.display="none"; document.body.classList.remove("locked"); }
+function tryPin(){
+  const v=document.getElementById("pin").value.trim(), h=fnv("obhod:"+v);
+  if(PINS[h]){ lsSet("obhod:pin",h); document.getElementById("pin").value=""; document.getElementById("pinErr").textContent=""; unlock(); init(); }
+  else { document.getElementById("pinErr").textContent="Неверный код"; document.getElementById("pin").value=""; }
+}
+document.getElementById("pinBtn").onclick=tryPin;
+document.getElementById("pin").addEventListener("keydown",e=>{ if(e.key==="Enter") tryPin(); });
+
+if(access()){ unlock(); init(); } else setTimeout(()=>document.getElementById("pin").focus(),100);
 </script>
 </body>
 </html>
