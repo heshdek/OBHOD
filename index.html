@@ -69,10 +69,13 @@
   .filter button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
   #lock{position:fixed;inset:0;z-index:50;background:var(--navy);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
   #lock h2{margin:0 0 6px;font-size:22px} #lock p{margin:0 0 18px;opacity:.8;font-size:14px}
-  #lock input{width:180px;text-align:center;font-size:26px;letter-spacing:8px;border:0;border-radius:12px;padding:12px}
-  #lock button{margin-top:14px;width:180px;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:700;background:#7be0a6;color:#0d3b24}
+  #lock input{width:200px;text-align:center;font-size:26px;letter-spacing:8px;border:0;border-radius:12px;padding:12px}
+  #lock button{margin-top:14px;width:200px;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:700;background:#7be0a6;color:#0d3b24}
   #lock .err{color:#ffb3b3;min-height:20px;margin-top:10px;font-size:14px}
   body.locked{overflow:hidden}
+  .smallbtn{border:0;border-radius:10px;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;background:var(--navy);color:#fff;white-space:nowrap}
+  .smallbtn.red{background:#fbdede;color:#8e1f1f} .smallbtn.grey{background:#eef0f3;color:var(--muted)}
+  #gList div{align-items:center;gap:6px}
 </style>
 </head>
 <body class="locked">
@@ -80,7 +83,7 @@
   <div style="font-size:44px">🔒</div>
   <h2>Обход этажа</h2>
   <p>Введите код доступа</p>
-  <input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12">
+  <input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="код">
   <button id="pinBtn">Войти</button>
   <div class="err" id="pinErr"></div>
 </div>
@@ -126,6 +129,29 @@
   <input id="who" type="text" placeholder="Иванов И.И.">
   <label>Архив проверок этого этажа</label>
   <div class="hist" id="hist"></div>
+  <div id="admin" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:10px">
+    <h3 style="font-size:16px">🔑 Выдать код</h3>
+    <label>Доступ</label>
+    <select id="gFloor" style="width:100%;border:1.5px solid var(--line)"></select>
+    <label>Кому (для себя, чтобы не забыть)</label>
+    <input id="gWho" type="text" placeholder="Тьютор Анна, 7 этаж">
+    <div class="acts" style="margin-top:10px"><button id="gBtn" style="background:#1e9e57;color:#fff">Создать код</button></div>
+    <div id="gOut" style="display:none;text-align:center;margin-top:10px;background:#eef6f1;border-radius:12px;padding:10px">
+      <div style="font-size:28px;font-weight:800;letter-spacing:2px" id="gCode"></div>
+      <div style="font-size:13px;color:var(--muted)" id="gFor"></div>
+      <button id="gCopy" style="margin-top:8px;border:0;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;background:var(--navy);color:#fff">📋 Скопировать сообщение</button>
+    </div>
+    <label>Выданные коды</label>
+    <div class="hist" id="gList" style="max-height:34vh"></div>
+    <label>Отключить любой код (например, код старосты)</label>
+    <div style="display:flex;gap:6px"><input id="bCode" type="text" inputmode="numeric" placeholder="9992 или 01-4280"><button id="bBtn" class="smallbtn red">Отключить</button></div>
+    <h3 style="font-size:16px;margin-top:16px">⚙️ Подключения</h3>
+    <label>Ключ GitHub (хранится только в этом телефоне)</label>
+    <div style="display:flex;gap:6px"><input id="ghTok" type="password" placeholder="github_pat_…"><button id="ghBtn" class="smallbtn">Проверить</button></div>
+    <label>Ссылка журнала (Google Таблица → Apps Script)</label>
+    <div style="display:flex;gap:6px"><input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec"><button id="logBtn" class="smallbtn">Сохранить</button></div>
+    <div id="connInfo" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+  </div>
   <div class="acts">
     <button id="btnLogout" style="background:#eef0f3;color:var(--ink)">Сменить код</button>
     <button id="btnReset" style="background:#fbdede;color:#8e1f1f">Очистить день</button>
@@ -270,11 +296,76 @@ $("#btnMore").onclick = ()=>{
     const cnt=Object.values(dd).filter(r=>r.s.some(x=>x)).length;
     return `<div><a href="#" data-d="${d}">${fmtDate(d)}</a><span>${cnt} комн.</span></div>`;
   }).join("") : `<p style="color:var(--muted)">Пока нет сохранённых проверок.</p>`;
+  renderAdmin();
   $("#dlg").showModal();
 };
 $("#hist").onclick = e=>{ const a=e.target.closest("a"); if(!a) return; e.preventDefault(); date=a.dataset.d; $("#date").value=date; load(); render(); $("#dlg").close(); };
 $("#btnClose").onclick = ()=>$("#dlg").close();
-$("#btnLogout").onclick = ()=>{ $("#dlg").close(); lsDel("obhod:pin"); document.body.classList.add("locked"); const l=$("#lock"); l.style.display="flex"; setTimeout(()=>$("#pin").focus(),100); };
+
+/* ---------- выдача кодов (только главный код) ---------- */
+function genList(){ try{ return JSON.parse(lsGet("obhod:issued")||"[]"); }catch(e){ return []; } }
+function floorName(f){ return f==="*" ? "все этажи" : f+" этаж"; }
+function renderAdmin(){
+  const box=$("#admin"); if(access()!=="*"){ box.style.display="none"; return; }
+  box.style.display="block";
+  if(!$("#gFloor").options.length) $("#gFloor").innerHTML = GEN_FLOORS.map(f=>`<option value="${f}">${f==="*"?"Все этажи (проверяющий)":f+" этаж"}</option>`).join("");
+  const L=genList();
+  $("#gList").innerHTML = L.length ? L.slice().reverse().map(x=>{ const off=BLOCKED.has(digits(x.code));
+    return `<div style="${off?'opacity:.55':''}"><span style="flex:1"><b>${x.code}</b> · ${floorName(x.fl)}<br><small style="color:var(--muted)">${esc(x.who||"—")}</small></span>`+
+      (off?`<button class="smallbtn grey" data-un="${x.code}">Включить</button>`:`<button class="smallbtn red" data-bl="${x.code}">Отключить</button>`)+`</div>`; }).join("") : `<p style="color:var(--muted)">Пока не выдавали.</p>`;
+  $("#ghTok").value = tok(); $("#logUrl").value = cfg().log||"";
+  $("#connInfo").textContent = (tok()?"GitHub: ключ есть ✓":"GitHub: ключ не вписан")+" · "+(cfg().log?"Журнал: подключён ✓":"Журнал: не подключён");
+}
+$("#gBtn").onclick = ()=>{
+  const fl=$("#gFloor").value, who=$("#gWho").value.trim(), L=genList();
+  const usedN = new Set(L.filter(x=>x.fl===fl).map(x=>x.n));
+  let n=0;
+  for(let k=1;k<=99;k++){
+    if(usedN.has(k)) continue;
+    const c=genCheck(fl,k);
+    if(REVOKED.includes(fmtCode(k,c))) continue;
+    if(GEN_FLOORS.some(o=>o!==fl && genCheck(o,k)===c)) continue; // без совпадений с другими этажами
+    n=k; break;
+  }
+  if(!n){ toast("Для этого доступа коды закончились — напиши разработчику"); return; }
+  const code=fmtCode(n,genCheck(fl,n));
+  L.push({fl,n,code,who,d:today()}); lsSet("obhod:issued",JSON.stringify(L));
+  logEvent("Выдан код",{target:code, who, access:floorName(fl)});
+  $("#gCode").textContent=code; $("#gFor").textContent=floorName(fl)+(who?" · "+who:"");
+  $("#gOut").style.display="block"; $("#gWho").value=""; renderAdmin();
+};
+
+$("#gList").addEventListener("click", async e=>{
+  const b=e.target.closest("button"); if(!b) return; b.disabled=true;
+  if(b.dataset.bl){ await blockCode(b.dataset.bl); } else if(b.dataset.un){ await unblockCode(b.dataset.un); }
+  renderAdmin();
+});
+$("#bBtn").onclick = async ()=>{ const v=$("#bCode").value.trim(); if(!v) return; if(await blockCode(v)) $("#bCode").value=""; renderAdmin(); };
+$("#ghBtn").onclick = async ()=>{
+  const v=$("#ghTok").value.trim(); lsSet("obhod:ghtoken",v); if(!v){ renderAdmin(); return; }
+  try{ const r=await gh(""); const j=await r.json();
+    if(r.ok && j.permissions && j.permissions.push) toast("Ключ работает ✓"); else if(r.ok) toast("Ключ без права записи — проверь настройки"); else toast("Ключ не подходит ("+r.status+")");
+  }catch(e){ toast("Нет связи с GitHub"); } renderAdmin();
+};
+$("#logBtn").onclick = async ()=>{
+  const v=$("#logUrl").value.trim();
+  if(v && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(v)){ toast("Ссылка должна заканчиваться на /exec"); return; }
+  if(!tok()){ toast("Сначала впиши ключ GitHub"); return; }
+  try{ const f=await ghRead("config.json"); let j={}; try{ j=JSON.parse(f.text||"{}"); }catch(e){}
+    j.log=v; await ghWrite("config.json",JSON.stringify(j,null,2),f.sha,"Ссылка журнала"); lsSet("obhod:cfg",JSON.stringify(j));
+    // отправить в таблицу все ранее выданные коды
+    genList().forEach(x=>logEvent("Выдан код",{target:x.code, who:x.who, access:floorName(x.fl)}));
+    logEvent("Журнал подключён"); toast("Журнал подключён ✓ Проверь таблицу через минуту");
+  }catch(e){ toast("Не получилось ("+e.message+")"); } renderAdmin();
+};
+
+$("#gCopy").onclick = async ()=>{
+  const msg=`Твой код для приложения «Обход этажа» (${$("#gFor").textContent.split(" · ")[0]}):\n\n🔒 ${$("#gCode").textContent}\n\nСсылка: ${location.origin+location.pathname}\nКод личный, никому не передавай 🙏`;
+  try{ await navigator.clipboard.writeText(msg); toast("Скопировано — вставь в Telegram"); }
+  catch(e){ toast("Не удалось скопировать — перепиши код вручную"); }
+};
+
+$("#btnLogout").onclick = ()=>{ $("#dlg").close(); lsDel("obhod:pin"); lsDel("obhod:gcode"); document.body.classList.add("locked"); const l=$("#lock"); l.style.display="flex"; setTimeout(()=>$("#pin").focus(),100); };
 $("#btnReset").onclick = ()=>{ if(confirm(`Очистить проверку ${floor} этажа за ${fmtDate(date)}?`)){ data={}; save(); render(); $("#dlg").close(); } };
 
 function fmtDate(d){ const [y,m,dd]=d.split("-"); return `${dd}.${m}.${y}`; }
@@ -313,6 +404,8 @@ function buildSheet(fl, dt, dd, dorm, who){
     if(s.includes(2)) bad++; else if(s.includes(3)) warn++; else if(s.length===ITEMS.length&&s.every(x=>x===1)) ok++; else todo++; }
   r++;
   put(r,1,`Итого комнат: ${FLOORS[fl].length}.  Чисто: ${ok}.  Грязно: ${bad}.  С замечаниями: ${warn}.  Не проверено/не полностью: ${todo}.`,10); merges.push(`B${r}:N${r}`);
+  r++;
+  put(r,1,`Заполнено по коду: ${lsGet("obhod:code")||"—"} (${access()?codeLabel():"—"}) · устройство: ${devModel()} ${devId()}`,13); merges.push(`B${r}:N${r}`);
   r+=2;
   put(r,1,`    Специалист сопровождения:      _______________ / ${who||"____________________"} /`,0);
   put(r,8,"Начальник отдела УРСО: _______________ / Е.В. Герасимович /",0);
@@ -407,6 +500,7 @@ function zip(files){
 $("#btnExport").onclick = async ()=>{
   const blob = buildXlsx(floor, date, data, lsGet("obhod:dorm")||"", lsGet("obhod:who")||"");
   const name = `Обход_${floor}_этаж_${fmtDate(date)}.xlsx`;
+  logEvent("Скачал Excel",{date});
   try{
     const file = new File([blob], name, {type:blob.type});
     if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:name}); return; }
@@ -424,17 +518,121 @@ try{ navigator.storage && navigator.storage.persist && navigator.storage.persist
 /* ---------- коды доступа: у каждого этажа свой ---------- */
 const PINS = {"6df28825": "2", "5e4c8884": "3", "337636df": "4", "63d21abe": "5", "d1675ebf": "6", "44bc43d1": "7", "e28a5c19": "8", "e3ff20ea": "9", "51b5eda4": "10", "272637d4": "11", "6c3b099f": "12", "f3353c50": "13", "e67cfc41": "14", "2119c444": "15", "d7b8ff2d": "16", "062eb4d4": "*"};
 function fnv(s){ let h=0x811c9dc5; for(const b of new TextEncoder().encode(s)){ h^=b; h=Math.imul(h,0x01000193)>>>0; } return h.toString(16).padStart(8,"0"); }
-function access(){ return PINS[lsGet("obhod:pin")] || null; }
+const GEN_SECRET = "9b1ee02c048b0bbc";
+const REVOKED = [];           // сюда вписываются отозванные коды, например "07-3851"
+const GEN_FLOORS = ["*"].concat(Object.keys(FLOORS));
+function genCheck(fl, n){ return parseInt(fnv("gen:"+GEN_SECRET+":"+fl+":"+n),16) % 10000; }
+function fmtCode(n, c){ return String(n).padStart(2,"0")+"-"+String(c).padStart(4,"0"); }
+function verifyGen(code){
+  const d=(code||"").replace(/\D/g,""); if(d.length!==6) return null;
+  const n=+d.slice(0,2), c=+d.slice(2); if(!n) return null;
+  if(REVOKED.includes(fmtCode(n,c))) return null;
+  for(const fl of GEN_FLOORS) if(genCheck(fl,n)===c) return fl;
+  return null;
+}
+let BLOCKED = new Set((()=>{ try{ return JSON.parse(lsGet("obhod:blocked")||"[]"); }catch(e){ return []; } })());
+function digits(s){ return String(s||"").replace(/\D/g,""); }
+function hashBlocked(h){ for(const b of BLOCKED) if(fnv("obhod:"+b)===h) return true; return false; }
+function access(){
+  const h=lsGet("obhod:pin");
+  if(PINS[h] && (PINS[h]==="*" || !hashBlocked(h))) return PINS[h];
+  const g=lsGet("obhod:gcode");
+  if(g && !BLOCKED.has(digits(g))) return verifyGen(g);
+  return null;
+}
+function codeLabel(){ const a=access(); const h=lsGet("obhod:pin");
+  if(PINS[h]) return a==="*" ? "Главный код" : `Староста ${a} эт.`;
+  return a==="*" ? "Проверяющий, все этажи" : `Доп. код, ${a} эт.`; }
 function unlock(){ const l=document.getElementById("lock"); if(l) l.style.display="none"; document.body.classList.remove("locked"); }
 function tryPin(){
-  const v=document.getElementById("pin").value.trim(), h=fnv("obhod:"+v);
-  if(PINS[h]){ lsSet("obhod:pin",h); document.getElementById("pin").value=""; document.getElementById("pinErr").textContent=""; unlock(); init(); }
-  else { document.getElementById("pinErr").textContent="Неверный код"; document.getElementById("pin").value=""; }
+  const v=document.getElementById("pin").value.trim(), d=digits(v), h=fnv("obhod:"+v);
+  let ok=false, blocked=false;
+  if(PINS[h]){ if(PINS[h]!=="*" && BLOCKED.has(d)) blocked=true; else { lsSet("obhod:pin",h); lsDel("obhod:gcode"); lsSet("obhod:code",v); ok=true; } }
+  else if(verifyGen(v)){ if(BLOCKED.has(d)) blocked=true; else { lsSet("obhod:gcode",d); lsDel("obhod:pin"); lsSet("obhod:code",fmtCode(+d.slice(0,2),+d.slice(2))); ok=true; } }
+  if(ok){ document.getElementById("pin").value=""; document.getElementById("pinErr").textContent=""; unlock(); init(); logEvent("Вход"); }
+  else { document.getElementById("pinErr").textContent = blocked ? "Этот код отключён" : "Неверный код"; document.getElementById("pin").value=""; }
 }
 document.getElementById("pinBtn").onclick=tryPin;
 document.getElementById("pin").addEventListener("keydown",e=>{ if(e.key==="Enter") tryPin(); });
 
-if(access()){ unlock(); init(); } else setTimeout(()=>document.getElementById("pin").focus(),100);
+/* ---------- связь с сайтом: список отключённых кодов и журнал ---------- */
+function cfg(){ try{ return JSON.parse(lsGet("obhod:cfg")||"{}"); }catch(e){ return {}; } }
+function lockNow(msg){ document.body.classList.add("locked"); const l=document.getElementById("lock"); l.style.display="flex"; document.getElementById("pinErr").textContent=msg||""; }
+async function syncRemote(){
+  if(!location.protocol.startsWith("http")) return;
+  const ts="?t="+Date.now();
+  try{ const r=await fetch("blocked.txt"+ts,{cache:"no-store"});
+    if(r.ok){ const txt=await r.text(); if(!/<html/i.test(txt)){
+      const list=txt.split(/\r?\n/).map(s=>s.split("#")[0]).map(digits).filter(s=>s.length>=4);
+      BLOCKED=new Set(list); lsSet("obhod:blocked",JSON.stringify(list)); } }
+    else if(r.status===404){ BLOCKED=new Set(); lsSet("obhod:blocked","[]"); }
+  }catch(e){}
+  try{ const r=await fetch("config.json"+ts,{cache:"no-store"}); if(r.ok){ const j=await r.json(); lsSet("obhod:cfg",JSON.stringify(j)); } }catch(e){}
+  if(!access() && !document.body.classList.contains("locked")) lockNow("Ваш код отключён. Обратитесь к председателю.");
+  flushLog();
+}
+function devId(){ let d=lsGet("obhod:dev"); if(!d){ d=Math.random().toString(36).slice(2,8).toUpperCase(); lsSet("obhod:dev",d); } return d; }
+function devModel(){ const u=navigator.userAgent;
+  if(/iPhone/.test(u)) return "iPhone"; if(/iPad/.test(u)) return "iPad";
+  const m=u.match(/Android[^;)]*;\s*([^;)]+?)(?:\s+Build|\))/); if(/Android/.test(u)) return "Android"+(m&&m[1]&&m[1]!=="K"?" "+m[1].trim():"");
+  return /Windows/.test(u)?"Компьютер Windows":/Mac/.test(u)?"Mac":"Другое"; }
+function logEvent(ev, extra){
+  let q=[]; try{ q=JSON.parse(lsGet("obhod:q")||"[]"); }catch(e){}
+  q.push(Object.assign({time:new Date().toISOString(), ev, code:lsGet("obhod:code")||"", label:access()?codeLabel():"", floor:floor||"", dev:devId(), model:devModel()}, extra||{}));
+  if(q.length>300) q=q.slice(-300);
+  lsSet("obhod:q",JSON.stringify(q)); flushLog();
+}
+let flushing=false;
+async function flushLog(){
+  const url=cfg().log; if(!url || flushing || !navigator.onLine) return;
+  let q=[]; try{ q=JSON.parse(lsGet("obhod:q")||"[]"); }catch(e){} if(!q.length) return;
+  flushing=true;
+  try{ await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({events:q})});
+    let now=[]; try{ now=JSON.parse(lsGet("obhod:q")||"[]"); }catch(e){} lsSet("obhod:q",JSON.stringify(now.slice(q.length)));
+  }catch(e){} flushing=false;
+}
+window.addEventListener("online", ()=>{ syncRemote(); });
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) syncRemote(); });
+function dailyOpen(){ const k="obhod:opened"; if(access() && lsGet(k)!==today()){ lsSet(k,today()); logEvent("Открыл приложение"); } }
+
+/* ---------- GitHub: изменения с телефона председателя ---------- */
+function repo(){ const o=location.hostname.endsWith(".github.io")?location.hostname.split(".")[0]:"heshdek"; const r=location.pathname.split("/")[1]||"OBHOD"; return o+"/"+r; }
+function tok(){ return lsGet("obhod:ghtoken")||""; }
+async function gh(path, opt){
+  const r=await fetch(`https://api.github.com/repos/${repo()}${path}`, Object.assign({headers:{"Authorization":"Bearer "+tok(),"Accept":"application/vnd.github+json"}},opt||{}));
+  return r;
+}
+function b64d(s){ return new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")),c=>c.charCodeAt(0))); }
+function b64e(s){ let b=""; new TextEncoder().encode(s).forEach(x=>b+=String.fromCharCode(x)); return btoa(b); }
+async function ghRead(file){ const r=await gh("/contents/"+file); if(r.status===404) return {sha:null,text:""}; if(!r.ok) throw new Error(r.status); const j=await r.json(); return {sha:j.sha,text:b64d(j.content)}; }
+async function ghWrite(file, text, sha, msg){
+  const body={message:msg, content:b64e(text)}; if(sha) body.sha=sha;
+  const r=await gh("/contents/"+file,{method:"PUT",body:JSON.stringify(body)}); if(!r.ok) throw new Error(r.status); }
+async function blockCode(code){
+  const d=digits(code); if(d.length<4){ toast("Код слишком короткий"); return false; }
+  if(PINS[fnv("obhod:"+code.trim())]==="*"){ toast("Главный код отключить нельзя"); return false; }
+  if(!tok()){ toast("Сначала впиши ключ GitHub (ниже)"); return false; }
+  try{
+    const f=await ghRead("blocked.txt");
+    let text=f.text || "# Отключённые коды — по одному в строке\n";
+    if(!text.split(/\r?\n/).some(l=>digits(l.split("#")[0])===d)) text=text.replace(/\s*$/,"\n")+code.trim()+"  # "+today()+"\n";
+    await ghWrite("blocked.txt",text,f.sha,"Отключён код "+code.trim());
+    BLOCKED.add(d); lsSet("obhod:blocked",JSON.stringify([...BLOCKED]));
+    logEvent("Отключён код",{target:code.trim()});
+    toast("Отключён. У всех сработает в течение 1–2 минут"); return true;
+  }catch(e){ toast(String(e.message)==="401"?"Ключ GitHub не подходит":"Не получилось ("+e.message+"). Есть интернет?"); return false; }
+}
+async function unblockCode(code){
+  const d=digits(code);
+  try{ const f=await ghRead("blocked.txt");
+    const text=f.text.split(/\r?\n/).filter(l=>digits(l.split("#")[0])!==d).join("\n");
+    await ghWrite("blocked.txt",text,f.sha,"Включён код "+code); BLOCKED.delete(d); lsSet("obhod:blocked",JSON.stringify([...BLOCKED]));
+    logEvent("Включён код",{target:code}); toast("Код снова работает"); return true;
+  }catch(e){ toast("Не получилось ("+e.message+")"); return false; }
+}
+
+if(access()){ unlock(); init(); dailyOpen(); } else setTimeout(()=>document.getElementById("pin").focus(),100);
+syncRemote();
 </script>
 </body>
 </html>
