@@ -314,7 +314,7 @@ function renderAdmin(){
     return `<div style="${off?'opacity:.55':''}"><span style="flex:1"><b>${x.code}</b> · ${floorName(x.fl)}<br><small style="color:var(--muted)">${esc(x.who||"—")}</small></span>`+
       (off?`<button class="smallbtn grey" data-un="${x.code}">Включить</button>`:`<button class="smallbtn red" data-bl="${x.code}">Отключить</button>`)+`</div>`; }).join("") : `<p style="color:var(--muted)">Пока не выдавали.</p>`;
   $("#ghTok").value = tok(); $("#logUrl").value = cfg().log||"";
-  $("#connInfo").textContent = (tok()?"GitHub: ключ есть ✓":"GitHub: ключ не вписан")+" · "+(cfg().log?"Журнал: подключён ✓":"Журнал: не подключён");
+  const ci=$("#connInfo"); ci.dataset.base = (tok()?"GitHub: ключ вписан":"GitHub: ключ не вписан")+" · "+(cfg().log?"Журнал: подключён ✓":"Журнал: не подключён"); ci.textContent = ci.dataset.base;
 }
 $("#gBtn").onclick = ()=>{
   const fl=$("#gFloor").value, who=$("#gWho").value.trim(), L=genList();
@@ -342,10 +342,16 @@ $("#gList").addEventListener("click", async e=>{
 });
 $("#bBtn").onclick = async ()=>{ const v=$("#bCode").value.trim(); if(!v) return; if(await blockCode(v)) $("#bCode").value=""; renderAdmin(); };
 $("#ghBtn").onclick = async ()=>{
-  const v=$("#ghTok").value.trim(); lsSet("obhod:ghtoken",v); if(!v){ renderAdmin(); return; }
-  try{ const r=await gh(""); const j=await r.json();
-    if(r.ok && j.permissions && j.permissions.push) toast("Ключ работает ✓"); else if(r.ok) toast("Ключ без права записи — проверь настройки"); else toast("Ключ не подходит ("+r.status+")");
-  }catch(e){ toast("Нет связи с GitHub"); } renderAdmin();
+  const v=$("#ghTok").value.trim().replace(/\s+/g,""); lsSet("obhod:ghtoken",v); renderAdmin(); if(!v){ toast("Поле ключа пустое"); return; }
+  const btn=$("#ghBtn"); btn.disabled=true; btn.textContent="Проверяю…"; let msg;
+  try{ const r=await gh(""); const j=await r.json().catch(()=>({}));
+    if(r.ok && j.permissions && j.permissions.push) msg="✅ Ключ работает";
+    else if(r.ok) msg="⚠️ Ключ без права записи: в GitHub поставь Contents → Read and write";
+    else if(r.status===401) msg="❌ Ключ не подходит — скопируй его заново целиком";
+    else if(r.status===404) msg="❌ Ключ не видит репозиторий OBHOD — выбери его в настройках ключа";
+    else msg="❌ Ошибка GitHub ("+r.status+")";
+  }catch(e){ msg="❌ Нет связи с GitHub — проверь интернет или выключи VPN"; }
+  btn.disabled=false; btn.textContent="Проверить"; toast(msg);
 };
 $("#logBtn").onclick = async ()=>{
   const v=$("#logUrl").value.trim();
@@ -369,7 +375,12 @@ $("#btnLogout").onclick = ()=>{ $("#dlg").close(); lsDel("obhod:pin"); lsDel("ob
 $("#btnReset").onclick = ()=>{ if(confirm(`Очистить проверку ${floor} этажа за ${fmtDate(date)}?`)){ data={}; save(); render(); $("#dlg").close(); } };
 
 function fmtDate(d){ const [y,m,dd]=d.split("-"); return `${dd}.${m}.${y}`; }
-function toast(t){ const el=$("#toast"); el.textContent=t; el.classList.add("on"); setTimeout(()=>el.classList.remove("on"),2200); }
+function toast(t){
+  const el=$("#toast"), dlg=$("#dlg");
+  (dlg.open ? dlg : document.body).appendChild(el);   // поверх окна «Ещё», если оно открыто
+  el.textContent=t; el.classList.add("on"); clearTimeout(toast.tm); toast.tm=setTimeout(()=>el.classList.remove("on"),3500);
+  const ci=document.getElementById("connInfo"); if(dlg.open && ci && $("#admin").style.display!=="none") ci.innerHTML="<b style='color:var(--ink)'>"+esc(t)+"</b><br>"+ci.dataset.base;
+}
 
 /* ---------- Excel (.xlsx) без интернета ---------- */
 const MONTHS=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
