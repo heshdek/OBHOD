@@ -130,7 +130,7 @@
 </footer>
 
 <dialog id="dlg">
-  <h3>Настройки и архив <small style="font-weight:400;color:var(--muted);font-size:12px">· версия 8</small></h3>
+  <h3>Настройки и архив <small style="font-weight:400;color:var(--muted);font-size:12px">· версия 9</small></h3>
   <label>ФИО старосты / специалиста (для подписи)</label>
   <input id="who" type="text" placeholder="Иванов И.И.">
   <div id="offInfo" style="font-size:13px;margin-top:10px;padding:8px 10px;border-radius:10px;background:#eef0f3"></div>
@@ -335,7 +335,7 @@ $("#btnClose").onclick = ()=>$("#dlg").close();
 function genList(){ try{ return JSON.parse(lsGet("obhod:issued")||"[]"); }catch(e){ return []; } }
 function floorName(f){ return f==="*" ? "все этажи" : f+" этаж"; }
 function renderAdmin(){
-  const box=$("#admin"); if(access()!=="*"){ box.style.display="none"; return; }
+  const box=$("#admin"); if(!isMaster()){ box.style.display="none"; return; }
   box.style.display="block";
   if(!$("#gFloor").options.length) $("#gFloor").innerHTML = GEN_FLOORS.map(f=>`<option value="${f}">${f==="*"?"Все этажи (проверяющий)":f+" этаж"}</option>`).join("");
   const L=genList();
@@ -346,6 +346,7 @@ function renderAdmin(){
   const ci=$("#connInfo"); ci.dataset.base = (tok()?"GitHub: ключ вписан":"GitHub: ключ не вписан")+" · "+(cfg().log?"Журнал: подключён ✓":"Журнал: не подключён"); ci.textContent = ci.dataset.base;
 }
 $("#gBtn").onclick = ()=>{
+  if(!isMaster()) return false;
   const fl=$("#gFloor").value, who=$("#gWho").value.trim(), L=genList();
   const usedN = new Set(L.filter(x=>x.fl===fl).map(x=>x.n));
   let n=0;
@@ -607,6 +608,7 @@ function access(){
   if(g && !BLOCKED.has(digits(g))) return verifyGen(g);
   return null;
 }
+function isMaster(){ return PINS[lsGet("obhod:pin")]==="*"; }
 function codeLabel(){ const a=access(); const h=lsGet("obhod:pin");
   if(PINS[h]) return a==="*" ? "Главный код" : `Староста ${a} эт.`;
   return a==="*" ? "Проверяющий, все этажи" : `Доп. код, ${a} эт.`; }
@@ -662,7 +664,7 @@ async function flushLog(){
 window.addEventListener("online", ()=>{ syncRemote(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) syncRemote(); });
 function syncIssuedOnce(){
-  if(access()!=="*" || lsGet("obhod:issuedSynced")===cfg().log) return;
+  if(!isMaster() || lsGet("obhod:issuedSynced")===cfg().log) return;
   genList().forEach(x=>logEvent("Выдан код",{target:x.code, who:x.who, access:floorName(x.fl)}));
   lsSet("obhod:issuedSynced", cfg().log);
 }
@@ -682,6 +684,7 @@ async function ghWrite(file, text, sha, msg){
   const body={message:msg, content:b64e(text)}; if(sha) body.sha=sha;
   const r=await gh("/contents/"+file,{method:"PUT",body:JSON.stringify(body)}); if(!r.ok) throw new Error(r.status); }
 async function blockCode(code){
+  if(!isMaster()) return false;
   const d=digits(code); if(d.length<4){ toast("Код слишком короткий"); return false; }
   if(PINS[fnv("obhod:"+code.trim())]==="*"){ toast("Главный код отключить нельзя"); return false; }
   if(!tok()){ toast("Сначала впиши ключ GitHub (ниже)"); return false; }
@@ -696,6 +699,7 @@ async function blockCode(code){
   }catch(e){ toast(String(e.message)==="401"?"Ключ GitHub не подходит":"Не получилось ("+e.message+"). Есть интернет?"); return false; }
 }
 async function unblockCode(code){
+  if(!isMaster()) return false;
   const d=digits(code);
   try{ const f=await ghRead("blocked.txt");
     const text=f.text.split(/\r?\n/).filter(l=>digits(l.split("#")[0])!==d).join("\n");
