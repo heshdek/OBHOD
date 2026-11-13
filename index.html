@@ -130,13 +130,14 @@
 </footer>
 
 <dialog id="dlg">
-  <h3>Настройки и архив <small style="font-weight:400;color:var(--muted);font-size:12px">· версия 9</small></h3>
+  <h3>Настройки и архив <small style="font-weight:400;color:var(--muted);font-size:12px">· версия 10</small></h3>
   <label>ФИО старосты / специалиста (для подписи)</label>
   <input id="who" type="text" placeholder="Иванов И.И.">
   <div id="offInfo" style="font-size:13px;margin-top:10px;padding:8px 10px;border-radius:10px;background:#eef0f3"></div>
   <label>Архив проверок этого этажа</label>
   <div class="hist" id="hist"></div>
   <div id="admin" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:10px">
+    <div id="keyStatus" style="font-size:13px;font-weight:600;padding:8px 10px;border-radius:10px;margin-bottom:10px"></div>
     <h3 style="font-size:16px">🔑 Выдать код</h3>
     <label>Доступ</label>
     <select id="gFloor" style="width:100%;border:1.5px solid var(--line)"></select>
@@ -325,7 +326,7 @@ $("#btnMore").onclick = ()=>{
     const cnt=Object.values(dd).filter(r=>r.s.some(x=>x)).length;
     return `<div><a href="#" data-d="${d}">${fmtDate(d)}</a><span>${cnt} комн.</span></div>`;
   }).join("") : `<p style="color:var(--muted)">Пока нет сохранённых проверок.</p>`;
-  renderAdmin(); offlineStatus();
+  renderAdmin(); offlineStatus(); showKeyStatus();
   $("#dlg").showModal();
 };
 $("#hist").onclick = e=>{ const a=e.target.closest("a"); if(!a) return; e.preventDefault(); date=a.dataset.d; $("#date").value=date; load(); render(); $("#dlg").close(); };
@@ -337,17 +338,22 @@ function floorName(f){ return f==="*" ? "все этажи" : f+" этаж"; }
 function renderAdmin(){
   const box=$("#admin"); if(!isMaster()){ box.style.display="none"; return; }
   box.style.display="block";
-  if(!$("#gFloor").options.length) $("#gFloor").innerHTML = GEN_FLOORS.map(f=>`<option value="${f}">${f==="*"?"Все этажи (проверяющий)":f+" этаж"}</option>`).join("");
+  if(!$("#gFloor").options.length) $("#gFloor").innerHTML = `<option value="">— выбери этаж —</option>`+Object.keys(FLOORS).map(f=>`<option value="${f}">только ${f} этаж</option>`).join("")+`<option value="*">⚠️ ВСЕ этажи (тьютор, председатель)</option>`;
   const L=genList();
-  $("#gList").innerHTML = L.length ? L.slice().reverse().map(x=>{ const off=BLOCKED.has(digits(x.code));
-    return `<div style="${off?'opacity:.55':''}"><span style="flex:1"><b>${x.code}</b> · ${floorName(x.fl)}<br><small style="color:var(--muted)">${esc(x.who||"—")}</small></span>`+
-      (off?`<button class="smallbtn grey" data-un="${x.code}">Включить</button>`:`<button class="smallbtn red" data-bl="${x.code}">Отключить</button>`)+`</div>`; }).join("") : `<p style="color:var(--muted)">Пока не выдавали.</p>`;
+  $("#gList").innerHTML = L.length ? L.slice().reverse().map(x=>{
+    const dead=verifyGen(x.code)!==x.fl, off=!dead && BLOCKED.has(digits(x.code));
+    const st = dead ? `<b style="color:#8e1f1f">не действует</b>` : off ? `<b style="color:#8e1f1f">отключён</b>` : `<b style="color:#11643a">работает</b>`;
+    return `<div style="${(off||dead)?'opacity:.6':''}"><span style="flex:1"><b>${x.code}</b> · ${x.fl==="*"?"ВСЕ этажи":"только "+x.fl+" этаж"} · ${st}<br><small style="color:var(--muted)">${esc(x.who||"—")}</small></span>`+
+      (dead?"":off?`<button class="smallbtn grey" data-un="${x.code}">Включить</button>`:`<button class="smallbtn red" data-bl="${x.code}">Отключить</button>`)+
+      `<button class="smallbtn grey" data-del="${x.code}" title="Удалить">🗑</button></div>`; }).join("") : `<p style="color:var(--muted)">Пока не выдавали.</p>`;
   $("#ghTok").value = tok(); $("#logUrl").value = cfg().log||"";
   const ci=$("#connInfo"); ci.dataset.base = (tok()?"GitHub: ключ вписан":"GitHub: ключ не вписан")+" · "+(cfg().log?"Журнал: подключён ✓":"Журнал: не подключён"); ci.textContent = ci.dataset.base;
 }
 $("#gBtn").onclick = ()=>{
   if(!isMaster()) return false;
   const fl=$("#gFloor").value, who=$("#gWho").value.trim(), L=genList();
+  if(!fl){ toast("⚠️ Сначала выбери этаж в поле «Доступ»"); return; }
+  if(fl==="*" && !confirm("Этот код откроет ВСЕ этажи.\nВыдавать только тьютору или председателю.\n\nСоздать?")) return;
   const usedN = new Set(L.filter(x=>x.fl===fl).map(x=>x.n));
   let n=0;
   for(let k=1;k<=99;k++){
@@ -361,27 +367,38 @@ $("#gBtn").onclick = ()=>{
   const code=fmtCode(n,genCheck(fl,n));
   L.push({fl,n,code,who,d:today()}); lsSet("obhod:issued",JSON.stringify(L));
   logEvent("Выдан код",{target:code, who, access:floorName(fl)});
-  $("#gCode").textContent=code; $("#gFor").textContent=floorName(fl)+(who?" · "+who:"");
-  $("#gOut").style.display="block"; $("#gWho").value=""; renderAdmin();
+  $("#gCode").textContent=code; $("#gFor").textContent=(fl==="*"?"ВСЕ этажи":"только "+fl+" этаж")+(who?" · "+who:"");
+  $("#gOut").style.display="block"; $("#gWho").value=""; $("#gFloor").value=""; renderAdmin();
 };
 
 $("#gList").addEventListener("click", async e=>{
   const b=e.target.closest("button"); if(!b) return; b.disabled=true;
   if(b.dataset.bl){ await blockCode(b.dataset.bl); } else if(b.dataset.un){ await unblockCode(b.dataset.un); }
+  else if(b.dataset.del){ const code=b.dataset.del, L=genList(), x=L.find(y=>y.code===code);
+    const active = x && verifyGen(code)===x.fl && !BLOCKED.has(digits(code));
+    if(confirm("Удалить код "+code+" из списка?"+(active?"\nОн будет отключён.":""))){
+      if(!active || await blockCode(code)){ lsSet("obhod:issued",JSON.stringify(L.filter(y=>y.code!==code))); toast("Код "+code+" удалён"); } } }
   renderAdmin();
 });
 $("#bBtn").onclick = async ()=>{ const v=$("#bCode").value.trim(); if(!v) return; if(await blockCode(v)) $("#bCode").value=""; renderAdmin(); };
-$("#ghBtn").onclick = async ()=>{
-  const v=$("#ghTok").value.trim().replace(/\s+/g,""); lsSet("obhod:ghtoken",v); renderAdmin(); if(!v){ toast("Поле ключа пустое"); return; }
-  const btn=$("#ghBtn"); btn.disabled=true; btn.textContent="Проверяю…"; let msg;
+async function checkKey(){
+  if(!tok()) return "❌ Ключа GitHub нет — «Отключить» не сработает. Вставь ключ ниже";
   try{ const r=await gh(""); const j=await r.json().catch(()=>({}));
-    if(r.ok && j.permissions && j.permissions.push) msg="✅ Ключ работает";
-    else if(r.ok) msg="⚠️ Ключ без права записи: в GitHub поставь Contents → Read and write";
-    else if(r.status===401) msg="❌ Ключ не подходит — скопируй его заново целиком";
-    else if(r.status===404) msg="❌ Ключ не видит репозиторий OBHOD — выбери его в настройках ключа";
-    else msg="❌ Ошибка GitHub ("+r.status+")";
-  }catch(e){ msg="❌ Нет связи с GitHub — проверь интернет или выключи VPN"; }
-  btn.disabled=false; btn.textContent="Проверить"; toast(msg);
+    if(r.ok && j.permissions && j.permissions.push) return "✅ Ключ GitHub работает — коды можно отключать";
+    if(r.ok) return "⚠️ Ключ без права записи: в GitHub поставь Contents → Read and write";
+    if(r.status===401) return "❌ Ключ GitHub не подходит — скопируй его заново целиком";
+    if(r.status===404) return "❌ Ключ не видит репозиторий OBHOD — выбери его в настройках ключа";
+    return "❌ Ошибка GitHub ("+r.status+")";
+  }catch(e){ return "❌ Нет связи с GitHub — проверь интернет или выключи VPN"; }
+}
+async function showKeyStatus(){
+  const el=$("#keyStatus"); if(!isMaster()) return; el.textContent="Проверяю ключ GitHub…"; el.style.background="#eef0f3";
+  const m=await checkKey(); el.textContent=m; el.style.background=m.startsWith("✅")?"#d9f3e4":"#fbdede"; return m;
+}
+$("#ghBtn").onclick = async ()=>{
+  const v=$("#ghTok").value.trim().replace(/\s+/g,""); lsSet("obhod:ghtoken",v); renderAdmin();
+  const btn=$("#ghBtn"); btn.disabled=true; btn.textContent="Проверяю…";
+  const msg=await showKeyStatus(); btn.disabled=false; btn.textContent="Проверить"; toast(msg);
 };
 $("#logBtn").onclick = async ()=>{
   const v=$("#logUrl").value.trim();
@@ -589,7 +606,7 @@ function fnv(s){ let h=0x811c9dc5; for(const b of new TextEncoder().encode(s)){ 
 const GEN_SECRET = "9b1ee02c048b0bbc";
 const REVOKED = [];           // сюда вписываются отозванные коды, например "07-3851"
 const GEN_FLOORS = ["*"].concat(Object.keys(FLOORS));
-function genCheck(fl, n){ return parseInt(fnv("gen:"+GEN_SECRET+":"+fl+":"+n),16) % 10000; }
+function genCheck(fl, n){ return parseInt(fnv("gen:"+GEN_SECRET+":"+(fl==="*"?"*v2":fl)+":"+n),16) % 10000; }
 function fmtCode(n, c){ return String(n).padStart(2,"0")+"-"+String(c).padStart(4,"0"); }
 function verifyGen(code){
   const d=(code||"").replace(/\D/g,""); if(d.length!==6) return null;
