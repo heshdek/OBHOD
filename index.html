@@ -558,7 +558,7 @@ function unlock(){ const l=document.getElementById("lock"); if(l) l.style.displa
 function tryPin(){
   const v=document.getElementById("pin").value.trim(), d=digits(v), h=fnv("obhod:"+v);
   let ok=false, blocked=false;
-  if(PINS[h]){ if(PINS[h]!=="*" && BLOCKED.has(d)) blocked=true; else { lsSet("obhod:pin",h); lsDel("obhod:gcode"); lsSet("obhod:code",v); ok=true; } }
+  if(PINS[h]){ if(PINS[h]!=="*" && BLOCKED.has(d)) blocked=true; else { lsSet("obhod:pin",h); lsDel("obhod:gcode"); lsSet("obhod:code",v); ok=true; setTimeout(syncIssuedOnce,300); } }
   else if(verifyGen(v)){ if(BLOCKED.has(d)) blocked=true; else { lsSet("obhod:gcode",d); lsDel("obhod:pin"); lsSet("obhod:code",fmtCode(+d.slice(0,2),+d.slice(2))); ok=true; } }
   if(ok){ document.getElementById("pin").value=""; document.getElementById("pinErr").textContent=""; unlock(); init(); logEvent("Вход"); }
   else { document.getElementById("pinErr").textContent = blocked ? "Этот код отключён" : "Неверный код"; document.getElementById("pin").value=""; }
@@ -567,7 +567,8 @@ document.getElementById("pinBtn").onclick=tryPin;
 document.getElementById("pin").addEventListener("keydown",e=>{ if(e.key==="Enter") tryPin(); });
 
 /* ---------- связь с сайтом: список отключённых кодов и журнал ---------- */
-function cfg(){ try{ return JSON.parse(lsGet("obhod:cfg")||"{}"); }catch(e){ return {}; } }
+const DEFAULT_LOG = "https://script.google.com/macros/s/AKfycbz9o-nkllTN-Vlp40M1nYoj22e90MTxhw188Lz_zRSZEpdkUMrArkdMvs7IE3PxW-cX0A/exec";
+function cfg(){ let c={}; try{ c=JSON.parse(lsGet("obhod:cfg")||"{}"); }catch(e){} if(!c.log) c.log=DEFAULT_LOG; return c; }
 function lockNow(msg){ document.body.classList.add("locked"); const l=document.getElementById("lock"); l.style.display="flex"; document.getElementById("pinErr").textContent=msg||""; }
 async function syncRemote(){
   if(!location.protocol.startsWith("http")) return;
@@ -604,7 +605,12 @@ async function flushLog(){
 }
 window.addEventListener("online", ()=>{ syncRemote(); });
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) syncRemote(); });
-function dailyOpen(){ const k="obhod:opened"; if(access() && lsGet(k)!==today()){ lsSet(k,today()); logEvent("Открыл приложение"); } }
+function syncIssuedOnce(){
+  if(access()!=="*" || lsGet("obhod:issuedSynced")===cfg().log) return;
+  genList().forEach(x=>logEvent("Выдан код",{target:x.code, who:x.who, access:floorName(x.fl)}));
+  lsSet("obhod:issuedSynced", cfg().log);
+}
+function dailyOpen(){ syncIssuedOnce(); const k="obhod:opened"; if(access() && lsGet(k)!==today()){ lsSet(k,today()); logEvent("Открыл приложение"); } }
 
 /* ---------- GitHub: изменения с телефона председателя ---------- */
 function repo(){ const o=location.hostname.endsWith(".github.io")?location.hostname.split(".")[0]:"heshdek"; const r=location.pathname.split("/")[1]||"OBHOD"; return o+"/"+r; }
