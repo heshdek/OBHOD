@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f3b57">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Обход">
+<title>Обход этажа — проверка комнат</title>
+<style>
+  :root{
+    --bg:#f3f5f8; --card:#fff; --ink:#1b2430; --muted:#6b7684; --line:#dfe3e9;
+    --navy:#1f3b57; --g:#1e9e57; --gbg:#d9f3e4; --r:#d23b3b; --rbg:#fbdede; --y:#c99a00; --ybg:#fff2c4;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 12px 8px;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .row{display:flex;gap:8px;align-items:center}
+  .row+.row{margin-top:8px}
+  h1{font-size:16px;margin:0;flex:1;font-weight:700;letter-spacing:.2px}
+  select,input[type=date],input[type=text]{font:inherit;border:0;border-radius:10px;padding:9px 10px;background:#fff;color:var(--ink);min-width:0}
+  header select,header input{flex:1}
+  .lbl{font-size:12px;opacity:.8;white-space:nowrap}
+  .bar{height:6px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden;flex:1}
+  .bar i{display:block;height:100%;width:0;background:#7be0a6;transition:width .2s}
+  .stats{font-size:12px;white-space:nowrap}
+  .legend{display:flex;gap:10px;font-size:12px;padding:8px 12px;color:var(--muted);flex-wrap:wrap}
+  .dot{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:-1px;margin-right:3px}
+  main{padding:4px 10px 110px}
+  .room{background:var(--card);border-radius:14px;margin:10px 0;padding:10px;border:2px solid transparent;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .room.ok{border-color:var(--g)} .room.bad{border-color:var(--r)} .room.warn{border-color:var(--y)}
+  .rh{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .num{font-size:20px;font-weight:800;min-width:70px}
+  .badge{font-size:12px;color:var(--muted);flex:1}
+  .quick{border:0;border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;font-weight:600;background:var(--gbg);color:#11643a}
+  .quick.clr{background:#eef0f3;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .it{border:1.5px solid var(--line);background:#fafbfc;border-radius:10px;min-height:48px;padding:6px 4px;font:inherit;font-size:12.5px;line-height:1.15;color:var(--ink);display:flex;align-items:center;justify-content:center;text-align:center;user-select:none}
+  .it.s1{background:var(--gbg);border-color:var(--g);color:#0f5c33;font-weight:600}
+  .it.s2{background:var(--rbg);border-color:var(--r);color:#8e1f1f;font-weight:600}
+  .it.s3{background:var(--ybg);border-color:var(--y);color:#6d5300;font-weight:600}
+  .it.s1::before{content:"✓ "} .it.s2::before{content:"✗ "} .it.s3::before{content:"! "}
+  textarea{width:100%;margin-top:8px;border:1.5px solid var(--line);border-radius:10px;padding:8px;font:inherit;font-size:14px;resize:vertical;min-height:40px;display:none;background:#fffdf3}
+  .room.needs textarea, textarea.has{display:block}
+  .room.needs textarea{border-color:var(--y)}
+  footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:5}
+  footer button{flex:1;border:0;border-radius:12px;padding:13px 6px;font:inherit;font-weight:700;font-size:14px}
+  .b1{background:var(--navy);color:#fff} .b2{background:#e8edf3;color:var(--navy)}
+  dialog{border:0;border-radius:16px;padding:16px;width:min(92vw,420px)}
+  dialog::backdrop{background:rgba(0,0,0,.4)}
+  dialog h3{margin:0 0 10px}
+  dialog label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  dialog input{width:100%;border:1.5px solid var(--line)}
+  dialog .acts{display:flex;gap:8px;margin-top:14px}
+  dialog .acts button{flex:1;border:0;border-radius:10px;padding:11px;font:inherit;font-weight:600}
+  .hist{max-height:45vh;overflow:auto;margin-top:6px}
+  .hist div{display:flex;justify-content:space-between;padding:9px 4px;border-bottom:1px solid var(--line);font-size:14px}
+  .hist a{color:var(--navy);font-weight:600;text-decoration:none}
+  .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;z-index:9}
+  .toast.on{opacity:.95}
+  .filter{display:flex;gap:6px;padding:0 12px 4px;overflow-x:auto}
+  .filter button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font:inherit;font-size:13px;white-space:nowrap;color:var(--ink)}
+  .filter button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>Обход этажа</h1>
+    <span class="lbl">Общ. №</span>
+    <input id="dorm" type="text" inputmode="numeric" placeholder="—" style="flex:0 0 58px;text-align:center">
+  </div>
+  <div class="row">
+    <select id="floor"></select>
+    <input id="date" type="date">
+  </div>
+  <div class="row">
+    <div class="bar"><i id="prog"></i></div>
+    <span class="stats" id="stats">0 / 0</span>
+  </div>
+</header>
+
+<div class="legend">
+  <span><i class="dot" style="background:var(--g)"></i>чисто</span>
+  <span><i class="dot" style="background:var(--r)"></i>грязно</span>
+  <span><i class="dot" style="background:var(--y)"></i>замечание</span>
+  <span>· нажми ещё раз — сменится цвет</span>
+</div>
+<div class="filter" id="filter">
+  <button data-f="all" class="on">Все</button>
+  <button data-f="todo">Не проверены</button>
+  <button data-f="bad">Грязно</button>
+  <button data-f="warn">Замечания</button>
+</div>
+
+<main id="list"></main>
+
+<footer>
+  <button class="b2" id="btnMore">Ещё</button>
+  <button class="b1" id="btnExport">📥 Скачать Excel</button>
+</footer>
+
+<dialog id="dlg">
+  <h3>Настройки и архив</h3>
+  <label>ФИО старосты / специалиста (для подписи)</label>
+  <input id="who" type="text" placeholder="Иванов И.И.">
+  <label>Архив проверок этого этажа</label>
+  <div class="hist" id="hist"></div>
+  <div class="acts">
+    <button id="btnReset" style="background:#fbdede;color:#8e1f1f">Очистить день</button>
+    <button id="btnClose" style="background:var(--navy);color:#fff">Готово</button>
+  </div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+const FLOORS = {"2": ["200", "201", "202А", "202Б", "203А", "203Б", "204А", "204Б", "205", "206А", "206Б", "207А", "207Б", "208", "209А", "209Б", "210", "211А", "211Б", "214", "213А", "213Б", "215А", "215Б", "217А", "217Б", "219", "221"], "3": ["300", "301А", "301Б", "302А", "303А", "303Б", "304А", "304Б", "305", "306А", "306Б", "307А", "307Б", "308", "309А", "309Б", "310", "311А", "311Б", "313А", "313Б", "314", "315А", "315Б", "317А", "317Б", "319", "321"], "4": ["400", "401А", "401Б", "402А", "402Б", "403А", "403Б", "404А", "404Б", "405", "406А", "406Б", "407А", "407Б", "408", "409А", "409Б", "410", "411А", "411Б", "413А", "413Б", "414", "415А", "415Б", "417А", "417Б", "419", "421"], "5": ["500", "501А", "501Б", "502А", "502Б", "503", "504А", "504Б", "505", "506А", "506Б", "507А", "507Б", "508", "509", "510", "511А", "511Б", "513А", "513Б", "514", "515А", "515Б", "517А", "517Б", "519", "521"], "6": ["600", "601А", "601Б", "602А", "602Б", "603А", "603Б", "604А", "604Б", "605", "606А", "606Б", "607А", "607Б", "608", "609А", "609Б", "610", "611А", "611Б", "613А", "613Б", "614", "615А", "615Б", "617А", "617Б", "619", "621"], "7": ["700", "701А", "701Б", "702А", "702Б", "703", "704А", "704Б", "705", "706А", "706Б", "707А", "707Б", "708", "709", "710", "711А", "711Б", "713А", "713Б", "714", "715А", "715Б", "717А", "717Б", "719", "721"], "8": ["800", "801А", "801Б", "802А", "802Б", "803А", "803Б", "804А", "804Б", "805", "806А", "806Б", "807А", "807Б", "808", "809А", "809Б", "810", "811А", "811Б", "813А", "813Б", "814", "815А", "815Б", "817А", "817Б", "819", "821"], "9": ["900", "901А", "901Б", "902А", "902Б", "903", "904А", "904Б", "905", "906А", "906Б", "907А", "907Б", "908", "909", "910", "911А", "911Б", "913А", "913Б", "914", "915А", "915Б", "917А", "917Б", "919", "921"], "10": ["1000", "1001А", "1001Б", "1002А", "1002Б", "1003А", "1003Б", "1004А", "1004Б", "1005", "1006А", "1006Б", "1007А", "1007Б", "1008", "1009А", "1009Б", "1010", "1011А", "1011Б", "1013А", "1013Б", "1015А", "1015Б", "1017А", "1017Б", "1019", "1021"], "11": ["1100", "1101А", "1101Б", "1102А", "1102Б", "1103", "1104А", "1104Б", "1105", "1106А", "1106Б", "1107А", "1107Б", "1108", "1109", "1110", "1111А", "1111Б", "1113А", "1113Б", "1114", "1115А", "1115Б", "1117А", "1117Б", "1119", "1121"], "12": ["1200", "1201А", "1201Б", "1202А", "1202Б", "1203А", "1203Б", "1204А", "1204Б", "1205", "1206А", "1206Б", "1207А", "1207Б", "1208", "1209А", "1209Б", "1210", "1211А", "1211Б", "1213А", "1213Б", "1214", "1215А", "1215Б", "1217А", "1217Б", "1219", "1221"], "13": ["1300", "1301А", "1301Б", "1302А", "1302Б", "1303", "1304А", "1304Б", "1305", "1306А", "1306Б", "1307А", "1307Б", "1308", "1309", "1310", "1311А", "1311Б", "1313А", "1313Б", "1314", "1315А", "1315Б", "1317А", "1317Б", "1319", "1321"], "14": ["1400", "1401А", "1401Б", "1402А", "1402Б", "1403А", "1404Б", "1405", "1406А", "1406Б", "1407А", "1407Б", "1408", "1409А", "1409Б", "1410", "1411А", "1411Б", "1413А", "1413Б", "1414", "1415А", "1415Б", "1417А", "1417Б", "1419", "1421"], "15": ["1500", "1501А", "1501Б", "1502А", "1502Б", "1503А", "1503Б", "1504А", "1504Б", "1505", "1506А", "1506Б", "1507А", "1507Б", "1508", "1509А", "1509Б", "1510", "1511А", "1511Б", "1513А", "1513Б", "1514", "1515А", "1515Б", "1517А", "1517Б", "1519", "1521"], "16": ["1600", "1601А", "1601Б", "1602А", "1602Б", "1603А", "1603Б", "1604А", "1604Б", "1605", "1606А", "1606Б", "1607А", "1607Б", "1608", "1609А", "1609Б", "1610", "1611А", "1611Б", "1613А", "1613Б", "1614", "1615А", "1615Б", "1617", "1621"]};
+const ITEMS = [
+  ["Отмывка полов в комнате","Полы"],
+  ["Отмывка стен в комнате","Стены"],
+  ["Отмывка подоконника","Подоконник"],
+  ["Развеска штор","Шторы"],
+  ["Наведение порядка в шкафах","Шкафы"],
+  ["Отмывка ванной комнаты","Ванная"],
+  ["Отмывка туалета","Туалет"],
+  ["Отмывка коридора","Коридор"],
+  ["Отмывка кухни","Кухня"],
+  ["Наведение порядка в кухонных шкафах","Кухонные шкафы"],
+  ["Отмывка электроплиты","Электро&shy;плита"]
+];
+const ST_TXT = ["", "чисто", "грязно", "замеч."];
+
+/* ---------- хранение (в телефоне) ---------- */
+const mem = {};
+function lsGet(k){ try{ const v=localStorage.getItem(k); return v==null?mem[k]??null:v; }catch(e){ return mem[k]??null; } }
+function lsSet(k,v){ mem[k]=v; try{ localStorage.setItem(k,v); }catch(e){} }
+function lsDel(k){ delete mem[k]; try{ localStorage.removeItem(k); }catch(e){} }
+function lsKeys(){ let ks=Object.keys(mem); try{ for(let i=0;i<localStorage.length;i++) ks.push(localStorage.key(i)); }catch(e){} return [...new Set(ks)]; }
+
+const $ = s => document.querySelector(s);
+const today = () => { const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+let floor, date, data, filter="all";
+const key = () => `obhod:${floor}:${date}`;
+
+function load(){ try{ data = JSON.parse(lsGet(key())||"{}"); }catch(e){ data={}; } }
+function save(){
+  const has = Object.values(data).some(r => (r.s||[]).some(x=>x) || r.n);
+  if(has) lsSet(key(), JSON.stringify(data)); else lsDel(key());
+}
+function room(n){ return data[n] || (data[n] = {s:Array(ITEMS.length).fill(0), n:""}); }
+function status(n){
+  const r = data[n]; if(!r) return "todo";
+  const s = r.s;
+  if(s.includes(2)) return "bad";
+  if(s.includes(3)) return "warn";
+  if(s.every(x=>x===1)) return "ok";
+  return s.some(x=>x) ? "part" : "todo";
+}
+
+/* ---------- интерфейс ---------- */
+function render(){
+  const list = $("#list"); list.innerHTML = "";
+  for(const n of FLOORS[floor]){
+    const st = status(n);
+    if(filter==="todo" && !(st==="todo"||st==="part")) continue;
+    if(filter==="bad" && st!=="bad") continue;
+    if(filter==="warn" && st!=="warn") continue;
+    const r = data[n] || {s:Array(ITEMS.length).fill(0), n:""};
+    const el = document.createElement("section");
+    el.className = "room " + ({ok:"ok",bad:"bad",warn:"warn"}[st]||"") + (r.s.some(x=>x>=2)?" needs":"");
+    el.dataset.n = n;
+    el.innerHTML = `
+      <div class="rh">
+        <div class="num">${n}</div>
+        <div class="badge">${badge(r)}</div>
+        <button class="quick" data-a="all">✓ Всё чисто</button>
+        <button class="quick clr" data-a="clr" title="Сбросить">↺</button>
+      </div>
+      <div class="grid">${ITEMS.map((it,i)=>`<button class="it s${r.s[i]}" data-i="${i}">${it[1]}</button>`).join("")}</div>
+      <textarea class="${r.n?'has':''}" placeholder="Замечание: что именно не так…">${esc(r.n)}</textarea>`;
+    list.appendChild(el);
+  }
+  if(!list.children.length) list.innerHTML = `<p style="text-align:center;color:var(--muted);padding:30px">Здесь пусто 👌</p>`;
+  stats();
+}
+function badge(r){
+  const c=[0,0,0,0]; r.s.forEach(x=>c[x]++);
+  if(!c[1]&&!c[2]&&!c[3]) return "не проверена";
+  return [c[1]?`🟢${c[1]}`:"", c[2]?`🔴${c[2]}`:"", c[3]?`🟡${c[3]}`:"", c[0]?`⚪${c[0]}`:""].filter(Boolean).join(" ");
+}
+function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function stats(){
+  const rooms = FLOORS[floor]; let done=0, bad=0, warn=0;
+  for(const n of rooms){ const s=status(n); if(s!=="todo"&&s!=="part") done++; if(s==="bad") bad++; if(s==="warn") warn++; }
+  $("#prog").style.width = (100*done/rooms.length)+"%";
+  $("#stats").textContent = `${done}/${rooms.length} · 🔴${bad} 🟡${warn}`;
+}
+function refreshRoom(el){
+  const n = el.dataset.n, r = room(n), st = status(n);
+  el.className = "room " + ({ok:"ok",bad:"bad",warn:"warn"}[st]||"") + (r.s.some(x=>x>=2)?" needs":"");
+  el.querySelectorAll(".it").forEach((b,i)=>b.className="it s"+r.s[i]);
+  el.querySelector(".badge").textContent = badge(r);
+  stats();
+}
+
+$("#list").addEventListener("click", e=>{
+  const el = e.target.closest(".room"); if(!el) return;
+  const n = el.dataset.n, r = room(n);
+  const it = e.target.closest(".it");
+  if(it){ const i=+it.dataset.i; r.s[i] = (r.s[i]+1)%4; if(navigator.vibrate) navigator.vibrate(8); }
+  else if(e.target.dataset.a==="all"){ r.s = r.s.map(()=>1); }
+  else if(e.target.dataset.a==="clr"){ r.s = r.s.map(()=>0); r.n=""; el.querySelector("textarea").value=""; el.querySelector("textarea").classList.remove("has"); }
+  else return;
+  save(); refreshRoom(el);
+  if(r.s.some(x=>x>=2) && it && r.s[+it.dataset.i]===3 && !r.n) setTimeout(()=>el.querySelector("textarea").focus(),50);
+});
+$("#list").addEventListener("input", e=>{
+  if(e.target.tagName!=="TEXTAREA") return;
+  const el=e.target.closest(".room"); room(el.dataset.n).n = e.target.value;
+  e.target.classList.toggle("has", !!e.target.value); save();
+});
+$("#filter").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  filter=b.dataset.f; document.querySelectorAll("#filter button").forEach(x=>x.classList.toggle("on",x===b)); render();
+});
+
+function init(){
+  const sel=$("#floor");
+  sel.innerHTML = Object.keys(FLOORS).map(f=>`<option value="${f}">${f} этаж (${FLOORS[f].length} комн.)</option>`).join("");
+  const hash = decodeURIComponent(location.hash.slice(1));
+  floor = FLOORS[hash] ? hash : (FLOORS[lsGet("obhod:floor")] ? lsGet("obhod:floor") : Object.keys(FLOORS)[0]);
+  sel.value = floor; date = today(); $("#date").value = date;
+  $("#dorm").value = lsGet("obhod:dorm")||""; $("#who").value = lsGet("obhod:who")||"";
+  load(); render();
+}
+$("#floor").onchange = e=>{ floor=e.target.value; lsSet("obhod:floor",floor); load(); render(); window.scrollTo(0,0); };
+$("#date").onchange = e=>{ date=e.target.value||today(); e.target.value=date; load(); render(); };
+$("#dorm").oninput = e=>lsSet("obhod:dorm", e.target.value.trim());
+$("#who").oninput = e=>lsSet("obhod:who", e.target.value.trim());
+
+/* ---------- архив ---------- */
+$("#btnMore").onclick = ()=>{
+  const ks = lsKeys().filter(k=>k.startsWith(`obhod:${floor}:`)).map(k=>k.split(":")[2]).sort().reverse();
+  $("#hist").innerHTML = ks.length ? ks.map(d=>{
+    let dd={}; try{dd=JSON.parse(lsGet(`obhod:${floor}:${d}`)||"{}")}catch(e){}
+    const cnt=Object.values(dd).filter(r=>r.s.some(x=>x)).length;
+    return `<div><a href="#" data-d="${d}">${fmtDate(d)}</a><span>${cnt} комн.</span></div>`;
+  }).join("") : `<p style="color:var(--muted)">Пока нет сохранённых проверок.</p>`;
+  $("#dlg").showModal();
+};
+$("#hist").onclick = e=>{ const a=e.target.closest("a"); if(!a) return; e.preventDefault(); date=a.dataset.d; $("#date").value=date; load(); render(); $("#dlg").close(); };
+$("#btnClose").onclick = ()=>$("#dlg").close();
+$("#btnReset").onclick = ()=>{ if(confirm(`Очистить проверку ${floor} этажа за ${fmtDate(date)}?`)){ data={}; save(); render(); $("#dlg").close(); } };
+
+function fmtDate(d){ const [y,m,dd]=d.split("-"); return `${dd}.${m}.${y}`; }
+function toast(t){ const el=$("#toast"); el.textContent=t; el.classList.add("on"); setTimeout(()=>el.classList.remove("on"),2200); }
+
+/* ---------- Excel (.xlsx) без интернета ---------- */
+const MONTHS=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+function xmlEsc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function colName(i){ let s=""; i++; while(i){ const m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26);} return s; }
+
+function buildSheet(fl, dt, dd, dorm, who){
+  // столбцы: A(отступ) B(№) C..M (11 пунктов) N(примечание)
+  const rows = []; const merges = [];
+  const put = (r,c,v,s)=>{ (rows[r]=rows[r]||[])[c]={v,s}; };
+  put(2,11,"Приложение № 1",9); merges.push("L2:N2");
+  put(3,11,"к приказу",9); merges.push("L3:N3");
+  put(4,11,"от 7 мая 2026 г. № 822-р",9); merges.push("L4:N4");
+  put(6,1,`ОБЩЕЖИТИЕ № ${dorm||"______"}`,8); merges.push("B6:N6");
+  put(7,1,`${fl} этаж · проверка от ${fmtDate(dt)}`,10); merges.push("B7:N7");
+  put(8,1,"№ ком.",1); ITEMS.forEach((it,i)=>put(8,2+i,it[0],1)); put(8,13,"Примечание",1);
+  let r=9;
+  for(const n of FLOORS[fl]){
+    const rm = dd[n] || {s:Array(ITEMS.length).fill(0), n:""};
+    put(r,1,n,2);
+    rm.s.forEach((x,i)=>put(r,2+i,ST_TXT[x],[6,3,4,5][x]));
+    const yel = rm.s.map((x,i)=>x===3?ITEMS[i][1].replace("&shy;",""):null).filter(Boolean);
+    const red = rm.s.map((x,i)=>x===2?ITEMS[i][1].replace("&shy;",""):null).filter(Boolean);
+    let note = rm.n||"";
+    const auto = [red.length?`Грязно: ${red.join(", ")}`:"", yel.length?`Замеч.: ${yel.join(", ")}`:""].filter(Boolean).join("; ");
+    put(r,13, [note,auto].filter(Boolean).join(" — "), rm.s.includes(2)?11:(rm.s.includes(3)||note?12:7));
+    r++;
+  }
+  // итог
+  let ok=0,bad=0,warn=0,todo=0;
+  for(const n of FLOORS[fl]){ const rm=dd[n]; const s=rm?rm.s:[0];
+    if(s.includes(2)) bad++; else if(s.includes(3)) warn++; else if(s.length===ITEMS.length&&s.every(x=>x===1)) ok++; else todo++; }
+  r++;
+  put(r,1,`Итого комнат: ${FLOORS[fl].length}.  Чисто: ${ok}.  Грязно: ${bad}.  С замечаниями: ${warn}.  Не проверено/не полностью: ${todo}.`,10); merges.push(`B${r}:N${r}`);
+  r+=2;
+  put(r,1,`    Специалист сопровождения:      _______________ / ${who||"____________________"} /`,0);
+  put(r,8,"Начальник отдела УРСО: _______________ / Е.В. Герасимович /",0);
+  r++; put(r,4,"Подпись",13); merges.push(`E${r}:F${r}`); put(r,6,"Ф.И.О.",13); merges.push(`G${r}:H${r}`);
+  r+=2; const [y,m,d]=dt.split("-");
+  put(r,1,`«${d}» ${MONTHS[+m-1]} ${y} г.`,0);
+  const lastRow=r;
+
+  const widths={0:1.9,1:7.5,13:30}; for(let i=2;i<=12;i++) widths[i]=10.5;
+  let x=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="90"><pane ySplit="8" topLeftCell="A9" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>`;
+  for(let i=0;i<=13;i++) x+=`<col min="${i+1}" max="${i+1}" width="${widths[i]}" customWidth="1"/>`;
+  x+=`</cols><sheetData>`;
+  for(let i=1;i<=lastRow;i++){
+    const row=rows[i]; const noteLen = row&&row[13]&&row[13].v ? String(row[13].v).length : 0;
+    const ht = i===8?` ht="62" customHeight="1"`:(i>8&&i<9+FLOORS[fl].length?` ht="${noteLen>34?Math.min(90,15*Math.ceil(noteLen/34)):18}" customHeight="1"`:"");
+    if(!row){ x+=`<row r="${i}"${ht}/>`; continue; }
+    x+=`<row r="${i}"${ht}>`;
+    row.forEach((c,ci)=>{ if(!c) return; const ref=colName(ci)+i;
+      x+= c.v===""||c.v==null ? `<c r="${ref}" s="${c.s}"/>` : `<c r="${ref}" s="${c.s}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(c.v)}</t></is></c>`; });
+    x+=`</row>`;
+  }
+  x+=`</sheetData><mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join("")}</mergeCells>`;
+  x+=`<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="1"/></worksheet>`;
+  return x;
+}
+
+function buildXlsx(fl, dt, dd, dorm, who){
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="4"><font><sz val="11"/><name val="Times New Roman"/></font><font><b/><sz val="10"/><name val="Times New Roman"/></font><font><b/><sz val="13"/><name val="Times New Roman"/></font><font><sz val="10"/><name val="Times New Roman"/></font></fonts>
+<fills count="7"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFC6EFCE"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFC7CE"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFEB9C"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE7ECF2"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="none"/></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="14">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="right"/></xf>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>
+</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const sheetName = `${fl} ЭТ`;
+  const files = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlEsc(sheetName)}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'${xmlEsc(sheetName)}'!$8:$8</definedName></definedNames></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    "xl/styles.xml": styles,
+    "xl/worksheets/sheet1.xml": buildSheet(fl, dt, dd, dorm, who)
+  };
+  return zip(files);
+}
+
+const CRC_T = (()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(b){ let c=0xFFFFFFFF; for(let i=0;i<b.length;i++) c=CRC_T[(c^b[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function zip(files){
+  const enc=new TextEncoder(), parts=[], central=[]; let off=0;
+  const now=new Date(), dtime=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1), ddate=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
+  for(const [name,content] of Object.entries(files)){
+    const nb=enc.encode(name), db=enc.encode(content), crc=crc32(db);
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); lh.setUint16(8,0,true);
+    lh.setUint16(10,dtime,true); lh.setUint16(12,ddate,true); lh.setUint32(14,crc,true); lh.setUint32(18,db.length,true); lh.setUint32(22,db.length,true);
+    lh.setUint16(26,nb.length,true); lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer), nb, db);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true);
+    ch.setUint16(12,dtime,true); ch.setUint16(14,ddate,true); ch.setUint32(16,crc,true); ch.setUint32(20,db.length,true); ch.setUint32(24,db.length,true);
+    ch.setUint16(28,nb.length,true); ch.setUint32(42,off,true);
+    central.push(new Uint8Array(ch.buffer), nb);
+    off += 30+nb.length+db.length;
+  }
+  const csize=central.reduce((a,b)=>a+b.length,0);
+  const end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(8,Object.keys(files).length,true); end.setUint16(10,Object.keys(files).length,true);
+  end.setUint32(12,csize,true); end.setUint32(16,off,true);
+  return new Blob([...parts,...central,new Uint8Array(end.buffer)],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+
+$("#btnExport").onclick = async ()=>{
+  const blob = buildXlsx(floor, date, data, lsGet("obhod:dorm")||"", lsGet("obhod:who")||"");
+  const name = `Обход_${floor}_этаж_${fmtDate(date)}.xlsx`;
+  try{
+    const file = new File([blob], name, {type:blob.type});
+    if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:name}); return; }
+  }catch(e){ if(e && e.name==="AbortError") return; }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); toast("Файл сохранён в «Загрузки»");
+};
+
+/* ---------- офлайн-режим ---------- */
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+
+init();
+</script>
+</body>
+</html>
