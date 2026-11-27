@@ -27,11 +27,11 @@
   // Небо, солнце/луна, звёзды. Рисуется прямо на основной холст (не тонируется).
   BG.drawSky = function (ctx, V, W, time, dist) {
     const skyH = V.groundY + 10;
-    const sky = A.img.sky;
+    const sky = A.get('sky');
     if (sky) {
       const sc = Math.max(V.w / sky.width, skyH / sky.height);
       const dw = sky.width * sc, dh = sky.height * sc;
-      ctx.drawImage(sky, (V.w - dw) / 2, skyH - dh, dw, dh);
+      ctx.drawImage(sky, (V.w - dw) / 2, 0, dw, dh);   // привязка к верху: облака видны и в альбомном режиме
     } else {
       const g = ctx.createLinearGradient(0, 0, 0, skyH);
       g.addColorStop(0, '#3f93dc'); g.addColorStop(0.7, '#9fd2f0'); g.addColorStop(1, '#d8eef6');
