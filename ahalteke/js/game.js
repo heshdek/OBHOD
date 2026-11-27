@@ -20,7 +20,7 @@
     V.w = V.cssW / V.scale;
     V.h = V.cssH / V.scale;
     V.groundY = V.h - Math.max(110, V.h * 0.2);
-    V.horseX = clamp(V.w * 0.2, 110, 220);
+    V.horseX = clamp(V.w * 0.2, 165, 230);
     canvas.width = Math.round(V.cssW * V.dpr);
     canvas.height = Math.round(V.cssH * V.dpr);
     canvas.style.width = V.cssW + 'px';
@@ -274,11 +274,13 @@
   }
 
   // ---------------- Отрисовка ----------------
-  function drawSheet(c, img, cols, rows, idx, x, y, sx, sy) {
-    const fw = img.width / cols, fh = img.height / rows;
-    const ix = (idx % cols) * fw, iy = Math.floor(idx / cols) * fh;
-    const dw = C.HORSE_DRAW_W * sx, dh = C.HORSE_DRAW_W * fh / fw * sy;
-    c.drawImage(img, ix, iy, fw, fh, x - dw / 2, y - dh, dw, dh);
+  const frameCount = img => Math.max(1, Math.round(img.width / (img.height * C.FRAME_W / C.FRAME_H)));
+  // Кадр из листа «в одну строку»: якорь — центр туловища на линии земли
+  function drawSheet(c, img, idx, x, y, sx, sy) {
+    const n = frameCount(img), fw = img.width / n, fh = img.height;
+    idx = clamp(idx, 0, n - 1);
+    const k = C.HORSE_DRAW_W / fw, dw = fw * k * sx, dh = fh * k * sy;
+    c.drawImage(img, idx * fw, 0, fw, fh, x - dw * C.FRAME_ANCHOR_X, y - dh + C.FRAME_GROUND * k * sy, dw, dh);
   }
 
   function drawHorse(c) {
@@ -300,14 +302,18 @@
 
     const run = A.img.horse_run, jmp = A.img.horse_jump, fall = A.img.horse_fall;
     if (mode === 'jump' && jmp) {
-      drawSheet(c, jmp, C.JUMP_FRAMES, 1, clamp(Math.floor((k + 1) / 2 * C.JUMP_FRAMES), 0, C.JUMP_FRAMES - 1), x, y, 1, 1);
+      const n = frameCount(jmp);
+      drawSheet(c, jmp, Math.floor((k + 1) / 2 * n), x, y, 1, 1);
     } else if (mode === 'fall' && fall) {
-      const idx = G.state === 'play' ? Math.min(C.FALL_FRAMES - 1, Math.floor(Math.sin(Math.PI * ft) * C.FALL_FRAMES)) : Math.min(C.FALL_FRAMES - 1, Math.floor(ft * C.FALL_FRAMES));
-      drawSheet(c, fall, C.FALL_FRAMES, 1, idx, x, y, 1, 1);
+      const n = frameCount(fall);
+      const idx = G.state === 'play'
+        ? Math.floor(Math.sin(Math.PI * ft) * Math.min(n, C.STUMBLE_FRAMES) * 0.999)
+        : Math.floor(ft * n);
+      drawSheet(c, fall, idx, x, y, 1, 1);
     } else if ((mode === 'run' || mode === 'duck') && run) {
-      const idx = Math.floor(H.phase * C.RUN_FRAMES) % C.RUN_FRAMES;
-      if (mode === 'duck') drawSheet(c, run, C.RUN_COLS, C.RUN_ROWS, idx, x + 8, y, 1.08, 0.72);
-      else drawSheet(c, run, C.RUN_COLS, C.RUN_ROWS, idx, x, y, 1, 1);
+      const n = frameCount(run), idx = Math.floor(H.phase * n) % n;
+      if (mode === 'duck') drawSheet(c, run, idx, x + 6, y, 1.06, 0.72);
+      else drawSheet(c, run, idx, x, y, 1, 1);
     } else {
       AT.drawHorseProc(c, x, y, 1, { mode, p: H.phase, k, t: ft });
     }
@@ -431,8 +437,8 @@
     // подсказка по управлению в начале забега
     if (G.hintT > 0 && G.state === 'play') {
       ctx.globalAlpha = Math.min(1, G.hintT);
-      const hy = V.cssH - 64 - V.safe[2];
       const small = V.cssW < 520;
+      const hy = V.cssH - (small ? 110 : 64) - V.safe[2];
       txt(small ? 'Bas — bök · Uzak bas — beýik · Aşak süýş — egil' : 'Bas — bökmek · Uzak bas — beýik bökmek · Aşak süýş — egilmek', cx, hy, small ? 13 : 16, '#fff8e8', 'center');
       txt(small ? 'тап — прыжок · удержание — выше · свайп вниз — пригнуться' : 'тап / пробел — прыжок · удержание — высокий прыжок · свайп вниз / ↓ — пригнуться', cx, hy + 22, small ? 10 : 12, 'rgba(255,248,232,0.85)', 'center', 'normal');
       ctx.globalAlpha = 1;
