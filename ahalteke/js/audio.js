@@ -45,10 +45,76 @@
     s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
   }
 
+
+  // ---------- Фоновая музыка: мягкая, в туркменском ладу (пентатоника, пощипывание струны, дрон) ----------
+  // Ноты: A3 C4 D4 E4 G4 A4 C5 D5 — минорная пентатоника с мягкой «восточной» тягой
+  const SCALE = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33];
+  const CHORDS = [110, 146.83, 164.81, 110];   // дрон: A2, D3, E3, A2 — по тактам
+  const STEP = 60 / 84 / 2;                    // восьмые при 84 bpm
+  let mGain = null, mTimer = null, mNext = 0, mStep = 0, mIdx = 4, mStarted = false, mDrones = [];
+
+  function pluck(f, t, vol) {
+    const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
+    const lp = ac.createBiquadFilter(), g2 = ac.createGain();
+    o.type = 'triangle'; o.frequency.value = f;
+    o2.type = 'sine'; o2.frequency.value = f * 2;
+    lp.type = 'lowpass'; lp.frequency.value = 1800;
+    g2.gain.value = 0.22;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    o.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(mGain);
+    o.start(t); o2.start(t); o.stop(t + 1.6); o2.stop(t + 1.6);
+  }
+
+  function musicStep(t) {
+    const bar = Math.floor(mStep / 8) % CHORDS.length;
+    if (mStep % 8 === 0) {
+      mDrones.forEach((d, i) => {
+        const base = CHORDS[bar];
+        const f = i === 0 ? base : base * 1.5;      // квинта поверх
+        d.frequency.setTargetAtTime(f, t, 0.4);
+      });
+    }
+    // мелодия: случайное блуждание по ступеням, с паузами, чаще ходит вниз-вверх на соседние ноты
+    if (Math.random() < 0.62) {
+      const r = Math.random();
+      const move = r < 0.45 ? 1 : r < 0.9 ? -1 : (Math.random() < 0.5 ? 2 : -2);
+      mIdx = Math.max(0, Math.min(SCALE.length - 1, mIdx + move));
+      const vol = (mStep % 4 === 0 ? 0.075 : 0.05) * (0.85 + Math.random() * 0.3);
+      pluck(SCALE[mIdx], t, vol);
+      if (Math.random() < 0.18) pluck(SCALE[mIdx] * 2, t + STEP * 0.5, 0.03);   // редкое «эхо» октавой
+    }
+    mStep++;
+  }
+
+  function scheduleMusic() {
+    if (!ac || ac.state !== 'running') return;
+    while (mNext < ac.currentTime + 0.25) { musicStep(mNext); mNext += STEP; }
+  }
+
+  function startMusic() {
+    if (mStarted || !ac) return;
+    mStarted = true;
+    mGain = ac.createGain();
+    mGain.gain.value = 0.42;
+    mGain.connect(master);
+    for (let i = 0; i < 2; i++) {
+      const d = ac.createOscillator(), dg = ac.createGain();
+      d.type = 'sine'; d.frequency.value = CHORDS[0] * (i ? 1.5 : 1);
+      dg.gain.value = i ? 0.018 : 0.03;
+      d.connect(dg); dg.connect(mGain); d.start();
+      mDrones.push(d);
+    }
+    mNext = ac.currentTime + 0.15;
+    mTimer = setInterval(scheduleMusic, 90);
+  }
+
   AT.audio = {
     resume() {
       init();
       if (ac && ac.state === 'suspended') ac.resume().catch(() => {});
+      if (ac) startMusic();
     },
     setMuted(m) {
       muted = !!m;
