@@ -1185,68 +1185,69 @@ AT.clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   }
 
 
-  // ---------- Фоновая музыка: мягкая, в туркменском ладу (пентатоника, пощипывание струны, дрон) ----------
-  // Ноты: A3 C4 D4 E4 G4 A4 C5 D5 — минорная пентатоника с мягкой «восточной» тягой
-  const SCALE = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33];
-  const CHORDS = [110, 146.83, 164.81, 110];   // дрон: A2, D3, E3, A2 — по тактам
-  const STEP = 60 / 84 / 2;                    // восьмые при 84 bpm
-  let mGain = null, mTimer = null, mNext = 0, mStep = 0, mIdx = 4, mStarted = false, mDrones = [];
+  // ---------- Фоновая музыка: тихая, медитативная, восточная. Короткий повторяющийся мотив, мягкое эхо ----------
+  // Средний регистр, без высоких нот: A3 C4 D4 E4 G4 A4 — пентатоника
+  const SCALE = [220, 261.63, 293.66, 329.63, 392, 440];
+  // Мотив из 8 долей; -1 — пауза. Повторяется, иногда слегка меняется — отсюда гипнотический эффект
+  const MOTIF = [3, -1, 2, 4, 3, -1, 1, 2];
+  const CHORDS = [110, 146.83, 164.81, 110];        // дрон по тактам: A2, D3, E3, A2
+  const BEAT = 60 / 56;                              // медленно, ~56 долей в минуту
+  let mGain = null, mDelay = null, mTimer = null, mNext = 0, mBeat = 0, mStarted = false, mDrones = [], mVar = MOTIF.slice();
 
-  function pluck(f, t, vol) {
-    const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
-    const lp = ac.createBiquadFilter(), g2 = ac.createGain();
-    o.type = 'triangle'; o.frequency.value = f;
-    o2.type = 'sine'; o2.frequency.value = f * 2;
-    lp.type = 'lowpass'; lp.frequency.value = 1800;
-    g2.gain.value = 0.22;
+  function note(f, t, vol, dur) {
+    const o = ac.createOscillator(), low = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+    const lg = ac.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    low.type = 'sine'; low.frequency.value = f * 0.5; lg.gain.value = 0.25;
+    lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.4;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
-    o.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(mGain);
-    o.start(t); o2.start(t); o.stop(t + 1.6); o2.stop(t + 1.6);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.35);          // мягкая атака, без щелчка
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);         // долгое затухание
+    o.connect(lp); low.connect(lg); lg.connect(lp); lp.connect(g);
+    g.connect(mGain); g.connect(mDelay);                          // сухой звук и эхо
+    o.start(t); low.start(t); o.stop(t + dur + 0.1); low.stop(t + dur + 0.1);
   }
 
-  function musicStep(t) {
-    const bar = Math.floor(mStep / 8) % CHORDS.length;
-    if (mStep % 8 === 0) {
-      mDrones.forEach((d, i) => {
-        const base = CHORDS[bar];
-        const f = i === 0 ? base : base * 1.5;      // квинта поверх
-        d.frequency.setTargetAtTime(f, t, 0.4);
-      });
+  function musicBeat(t) {
+    const bar = Math.floor(mBeat / 8) % CHORDS.length;
+    if (mBeat % 8 === 0) {
+      // раз в два такта чуть меняем одну ноту мотива — мелодия живёт, но остаётся узнаваемой
+      if (mBeat > 0 && Math.random() < 0.5) {
+        const i = Math.floor(Math.random() * MOTIF.length);
+        if (MOTIF[i] >= 0) mVar[i] = Math.max(0, Math.min(SCALE.length - 1, MOTIF[i] + (Math.random() < 0.5 ? -1 : 1)));
+      }
+      mDrones.forEach((d, i) => d.frequency.setTargetAtTime(i === 0 ? CHORDS[bar] : CHORDS[bar] * 1.5, t, 1.2));
     }
-    // мелодия: случайное блуждание по ступеням, с паузами, чаще ходит вниз-вверх на соседние ноты
-    if (Math.random() < 0.62) {
-      const r = Math.random();
-      const move = r < 0.45 ? 1 : r < 0.9 ? -1 : (Math.random() < 0.5 ? 2 : -2);
-      mIdx = Math.max(0, Math.min(SCALE.length - 1, mIdx + move));
-      const vol = (mStep % 4 === 0 ? 0.075 : 0.05) * (0.85 + Math.random() * 0.3);
-      pluck(SCALE[mIdx], t, vol);
-      if (Math.random() < 0.18) pluck(SCALE[mIdx] * 2, t + STEP * 0.5, 0.03);   // редкое «эхо» октавой
-    }
-    mStep++;
+    const n = mVar[mBeat % MOTIF.length];
+    if (n >= 0) note(SCALE[n], t, 0.028, 2.6);
+    mBeat++;
   }
 
   function scheduleMusic() {
     if (!ac || ac.state !== 'running') return;
-    while (mNext < ac.currentTime + 0.25) { musicStep(mNext); mNext += STEP; }
+    while (mNext < ac.currentTime + 0.4) { musicBeat(mNext); mNext += BEAT; }
   }
 
   function startMusic() {
     if (mStarted || !ac) return;
     mStarted = true;
-    mGain = ac.createGain();
-    mGain.gain.value = 0.42;
+    mGain = ac.createGain(); mGain.gain.value = 0.55;
+    // эхо: мягкий «зал», отфильтрован, чтобы не звенело
+    mDelay = ac.createDelay(1.0); mDelay.delayTime.value = 0.62;
+    const fb = ac.createGain(); fb.gain.value = 0.38;
+    const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 1100;
+    const dout = ac.createGain(); dout.gain.value = 0.45;
+    mDelay.connect(dlp); dlp.connect(fb); fb.connect(mDelay); dlp.connect(dout); dout.connect(mGain);
     mGain.connect(master);
     for (let i = 0; i < 2; i++) {
       const d = ac.createOscillator(), dg = ac.createGain();
       d.type = 'sine'; d.frequency.value = CHORDS[0] * (i ? 1.5 : 1);
-      dg.gain.value = i ? 0.018 : 0.03;
+      dg.gain.value = i ? 0.012 : 0.02;
       d.connect(dg); dg.connect(mGain); d.start();
       mDrones.push(d);
     }
-    mNext = ac.currentTime + 0.15;
-    mTimer = setInterval(scheduleMusic, 90);
+    mNext = ac.currentTime + 0.3;
+    mTimer = setInterval(scheduleMusic, 150);
   }
 
   AT.audio = {
